@@ -755,12 +755,14 @@ func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account
 	if account == nil {
 		return false
 	}
-	if rule.DurationMinutes <= 0 {
+	// 使用 GetDurationSeconds() 方法获取持续时间（秒），支持秒级配置
+	durationSec := rule.GetDurationSeconds()
+	if durationSec <= 0 {
 		return false
 	}
 
 	now := time.Now()
-	until := now.Add(time.Duration(rule.DurationMinutes) * time.Minute)
+	until := now.Add(time.Duration(durationSec) * time.Second)
 
 	state := &TempUnschedState{
 		UntilUnix:       until.Unix(),

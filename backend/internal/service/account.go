@@ -53,7 +53,29 @@ type TempUnschedulableRule struct {
 	ErrorCode       int      `json:"error_code"`
 	Keywords        []string `json:"keywords"`
 	DurationMinutes int      `json:"duration_minutes"`
+	DurationSeconds int      `json:"duration_seconds,omitempty"` // 秒级持续时间，优先于 DurationMinutes
 	Description     string   `json:"description"`
+	RetryEnabled    bool     `json:"retry_enabled,omitempty"`    // 是否启用重试
+	RetryCount      int      `json:"retry_count,omitempty"`      // 重试次数 (1-10)
+}
+
+// GetDurationSeconds 计算实际持续时间（秒），优先使用 DurationSeconds
+func (r *TempUnschedulableRule) GetDurationSeconds() int {
+	if r.DurationSeconds > 0 {
+		return r.DurationSeconds
+	}
+	return r.DurationMinutes * 60
+}
+
+// GetRetryCount 获取有效重试次数，范围限制在 1-10
+func (r *TempUnschedulableRule) GetRetryCount() int {
+	if !r.RetryEnabled || r.RetryCount <= 0 {
+		return 0
+	}
+	if r.RetryCount > 10 {
+		return 10
+	}
+	return r.RetryCount
 }
 
 func (a *Account) IsActive() bool {
@@ -263,10 +285,14 @@ func (a *Account) GetTempUnschedulableRules() []TempUnschedulableRule {
 			ErrorCode:       parseTempUnschedInt(entry["error_code"]),
 			Keywords:        parseTempUnschedStrings(entry["keywords"]),
 			DurationMinutes: parseTempUnschedInt(entry["duration_minutes"]),
+			DurationSeconds: parseTempUnschedInt(entry["duration_seconds"]),
 			Description:     parseTempUnschedString(entry["description"]),
+			RetryEnabled:    parseTempUnschedBool(entry["retry_enabled"]),
+			RetryCount:      parseTempUnschedInt(entry["retry_count"]),
 		}
 
-		if rule.ErrorCode <= 0 || rule.DurationMinutes <= 0 || len(rule.Keywords) == 0 {
+		// 验证规则有效性：错误码必须设置，持续时间必须有效（秒或分钟），关键词不能为空
+		if rule.ErrorCode <= 0 || rule.GetDurationSeconds() <= 0 || len(rule.Keywords) == 0 {
 			continue
 		}
 
@@ -343,6 +369,16 @@ func parseTempUnschedInt(value any) int {
 		}
 	}
 	return 0
+}
+
+func parseTempUnschedBool(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.ToLower(strings.TrimSpace(v)) == "true"
+	}
+	return false
 }
 
 func (a *Account) GetModelMapping() map[string]string {

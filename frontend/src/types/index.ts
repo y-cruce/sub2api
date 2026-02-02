@@ -432,7 +432,10 @@ export interface TempUnschedulableRule {
   error_code: number
   keywords: string[]
   duration_minutes: number
+  duration_seconds?: number // 秒级持续时间，优先于 duration_minutes
   description: string
+  retry_enabled?: boolean // 是否启用重试
+  retry_count?: number // 重试次数 (1-10)
 }
 
 export interface TempUnschedulableState {

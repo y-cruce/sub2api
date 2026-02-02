@@ -1964,6 +1964,99 @@ func (s *GatewayService) shouldRetryUpstreamError(account *Account, statusCode i
 	return !account.ShouldHandleErrorCode(statusCode)
 }
 
+// getRetryRuleForError 查找匹配的带重试配置的规则
+// 返回匹配的规则和匹配的关键词，如果没有匹配则返回 nil
+func (s *GatewayService) getRetryRuleForError(account *Account, statusCode int, responseBody []byte) (*TempUnschedulableRule, string) {
+	if account == nil || !account.IsTempUnschedulableEnabled() {
+		return nil, ""
+	}
+	rules := account.GetTempUnschedulableRules()
+	if len(rules) == 0 {
+		return nil, ""
+	}
+	if statusCode <= 0 || len(responseBody) == 0 {
+		return nil, ""
+	}
+
+	bodyLower := strings.ToLower(string(responseBody))
+
+	for i := range rules {
+		rule := &rules[i]
+		if rule.ErrorCode != statusCode {
+			continue
+		}
+		// 如果规则没有关键词，直接匹配错误码
+		if len(rule.Keywords) == 0 {
+			if rule.RetryEnabled && rule.GetRetryCount() > 0 {
+				return rule, ""
+			}
+			continue
+		}
+		// 匹配关键词
+		for _, keyword := range rule.Keywords {
+			k := strings.TrimSpace(keyword)
+			if k == "" {
+				continue
+			}
+			if strings.Contains(bodyLower, strings.ToLower(k)) {
+				if rule.RetryEnabled && rule.GetRetryCount() > 0 {
+					return rule, k
+				}
+				break // 关键词匹配但规则未启用重试
+			}
+		}
+	}
+	return nil, ""
+}
+
+// shouldRetryWithRule 检查是否应该基于规则进行重试
+func (s *GatewayService) shouldRetryWithRule(account *Account, statusCode int, responseBody []byte) (shouldRetry bool, maxAttempts int, rule *TempUnschedulableRule) {
+	retryRule, _ := s.getRetryRuleForError(account, statusCode, responseBody)
+	if retryRule != nil {
+		return true, retryRule.GetRetryCount(), retryRule
+	}
+	return false, 0, nil
+}
+
+// getRetryRuleForErrorWithoutRetryCheck 查找匹配的规则，不检查是否启用重试
+// 用于在 FailOver 时检查是否有配置限流时间的规则
+func (s *GatewayService) getRetryRuleForErrorWithoutRetryCheck(account *Account, statusCode int, responseBody []byte) (*TempUnschedulableRule, string) {
+	if account == nil || !account.IsTempUnschedulableEnabled() {
+		return nil, ""
+	}
+	rules := account.GetTempUnschedulableRules()
+	if len(rules) == 0 {
+		return nil, ""
+	}
+	if statusCode <= 0 || len(responseBody) == 0 {
+		return nil, ""
+	}
+
+	bodyLower := strings.ToLower(string(responseBody))
+
+	for i := range rules {
+		rule := &rules[i]
+		if rule.ErrorCode != statusCode {
+			continue
+		}
+		// 如果规则没有关键词，直接匹配错误码
+		if len(rule.Keywords) == 0 {
+			return rule, ""
+		}
+		// 匹配关键词
+		for _, keyword := range rule.Keywords {
+			k := strings.TrimSpace(keyword)
+			if k == "" {
+				continue
+			}
+			if strings.Contains(bodyLower, strings.ToLower(k)) {
+				return rule, k
+			}
+		}
+	}
+	return nil, ""
+}
+
 // shouldFailoverUpstreamError determines whether an upstream error should trigger account failover.
 func (s *GatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 	switch statusCode {
@@ -2486,10 +2579,31 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 
 		// 检查是否需要通用重试（排除400，因为400已经在上面特殊处理过了）
-		if resp.StatusCode >= 400 && resp.StatusCode != 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
-			if attempt < maxRetryAttempts {
+		if resp.StatusCode >= 400 && resp.StatusCode != 400 {
+			// 先读取响应体，用于规则匹配和重试判断
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+			_ = resp.Body.Close()
+
+			// 检查是否有匹配的重试规则
+			shouldRetryRule, ruleMaxAttempts, retryRule := s.shouldRetryWithRule(account, resp.StatusCode, respBody)
+			shouldRetryDefault := s.shouldRetryUpstreamError(account, resp.StatusCode)
+
+			// 确定是否重试以及最大重试次数
+			shouldRetry := shouldRetryRule || shouldRetryDefault
+			effectiveMaxAttempts := maxRetryAttempts
+			if shouldRetryRule && ruleMaxAttempts > 0 {
+				effectiveMaxAttempts = ruleMaxAttempts
+			}
+
+			// 保存规则信息到上下文，供后续处理使用
+			if retryRule != nil {
+				c.Set("retry_rule", retryRule)
+			}
+
+			if shouldRetry && attempt < effectiveMaxAttempts {
 				elapsed := time.Since(retryStart)
 				if elapsed >= maxRetryElapsed {
+					resp.Body = io.NopCloser(bytes.NewReader(respBody))
 					break
 				}
 
@@ -2499,11 +2613,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					delay = remaining
 				}
 				if delay <= 0 {
+					resp.Body = io.NopCloser(bytes.NewReader(respBody))
 					break
 				}
 
-				respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-				_ = resp.Body.Close()
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
 					AccountID:          account.ID,
@@ -2519,15 +2632,19 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 						return ""
 					}(),
 				})
-				log.Printf("Account %d: upstream error %d, retry %d/%d after %v (elapsed=%v/%v)",
-					account.ID, resp.StatusCode, attempt, maxRetryAttempts, delay, elapsed, maxRetryElapsed)
+				log.Printf("Account %d: upstream error %d, retry %d/%d after %v (elapsed=%v/%v, rule=%v)",
+					account.ID, resp.StatusCode, attempt, effectiveMaxAttempts, delay, elapsed, maxRetryElapsed, retryRule != nil)
 				if err := sleepWithContext(ctx, delay); err != nil {
 					return nil, err
 				}
 				continue
 			}
-			// 最后一次尝试也失败，跳出循环处理重试耗尽
-			break
+			// 恢复响应体供后续处理
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+			if shouldRetry {
+				// 最后一次尝试也失败，跳出循环处理重试耗尽
+				break
+			}
 		}
 
 		// 不需要重试（成功或不可重试的错误），跳出循环
@@ -2546,17 +2663,36 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	defer func() { _ = resp.Body.Close() }()
 
 	// 处理重试耗尽的情况
-	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
-			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-			_ = resp.Body.Close()
-			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+	// 检查是否有基于规则的重试或默认重试
+	respBodyForCheck, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(respBodyForCheck))
 
+	shouldRetryRule, _, retryRule := s.shouldRetryWithRule(account, resp.StatusCode, respBodyForCheck)
+	shouldRetryDefault := s.shouldRetryUpstreamError(account, resp.StatusCode)
+	wasRetrying := shouldRetryRule || shouldRetryDefault
+
+	if resp.StatusCode >= 400 && wasRetrying {
+		if s.shouldFailoverUpstreamError(resp.StatusCode) {
 			// 调试日志：打印重试耗尽后的错误响应
 			log.Printf("[Forward] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
-				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
+				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBodyForCheck), 1000))
 
-			s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			// 如果有规则配置的限流时间，在触发 FailOver 前设置限流
+			if retryRule != nil && retryRule.GetDurationSeconds() > 0 {
+				durationSec := retryRule.GetDurationSeconds()
+				resetAt := time.Now().Add(time.Duration(durationSec) * time.Second)
+				if s.rateLimitService != nil {
+					if err := s.rateLimitService.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
+						log.Printf("Account %d: failed to set rate limit after retry exhausted: %v", account.ID, err)
+					} else {
+						log.Printf("Account %d: rate limited for %d seconds after retry exhausted (rule)", account.ID, durationSec)
+					}
+				}
+			} else {
+				s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			}
+
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
@@ -2564,10 +2700,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				UpstreamStatusCode: resp.StatusCode,
 				UpstreamRequestID:  resp.Header.Get("x-request-id"),
 				Kind:               "retry_exhausted_failover",
-				Message:            extractUpstreamErrorMessage(respBody),
+				Message:            extractUpstreamErrorMessage(respBodyForCheck),
 				Detail: func() string {
 					if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-						return truncateString(string(respBody), s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes)
+						return truncateString(string(respBodyForCheck), s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes)
 					}
 					return ""
 				}(),
@@ -2577,7 +2713,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		return s.handleRetryExhaustedError(ctx, resp, c, account)
 	}
 
-	// 处理可切换账号的错误
+	// 处理可切换账号的错误（没有经过重试的 FailOver）
 	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(resp.StatusCode) {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		_ = resp.Body.Close()
@@ -2587,7 +2723,22 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		log.Printf("[Forward] Upstream error (failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
 			account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
-		s.handleFailoverSideEffects(ctx, resp, account)
+		// 检查是否有匹配的规则配置了限流时间（即使没有启用重试）
+		failoverRule, _ := s.getRetryRuleForErrorWithoutRetryCheck(account, resp.StatusCode, respBody)
+		if failoverRule != nil && failoverRule.GetDurationSeconds() > 0 {
+			durationSec := failoverRule.GetDurationSeconds()
+			resetAt := time.Now().Add(time.Duration(durationSec) * time.Second)
+			if s.rateLimitService != nil {
+				if err := s.rateLimitService.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
+					log.Printf("Account %d: failed to set rate limit on failover: %v", account.ID, err)
+				} else {
+					log.Printf("Account %d: rate limited for %d seconds on failover (rule)", account.ID, durationSec)
+				}
+			}
+		} else {
+			s.handleFailoverSideEffects(ctx, resp, account)
+		}
+
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,

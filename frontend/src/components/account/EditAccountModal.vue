@@ -462,14 +462,20 @@
                   />
                 </div>
                 <div>
-                  <label class="input-label">{{ t('admin.accounts.tempUnschedulable.durationMinutes') }}</label>
-                  <input
-                    v-model.number="rule.duration_minutes"
-                    type="number"
-                    min="1"
-                    class="input"
-                    :placeholder="t('admin.accounts.tempUnschedulable.durationPlaceholder')"
-                  />
+                  <label class="input-label">{{ t('admin.accounts.tempUnschedulable.duration') }}</label>
+                  <div class="flex gap-2">
+                    <input
+                      v-model.number="rule.duration_value"
+                      type="number"
+                      min="1"
+                      class="input flex-1"
+                      :placeholder="t('admin.accounts.tempUnschedulable.durationPlaceholder')"
+                    />
+                    <select v-model="rule.duration_unit" class="input w-24">
+                      <option value="seconds">{{ t('admin.accounts.tempUnschedulable.seconds') }}</option>
+                      <option value="minutes">{{ t('admin.accounts.tempUnschedulable.minutes') }}</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="sm:col-span-2">
                   <label class="input-label">{{ t('admin.accounts.tempUnschedulable.keywords') }}</label>
@@ -489,6 +495,45 @@
                     class="input"
                     :placeholder="t('admin.accounts.tempUnschedulable.descriptionPlaceholder')"
                   />
+                </div>
+
+                <!-- 重试配置 -->
+                <div class="sm:col-span-2 border-t border-gray-200 pt-3 dark:border-dark-600">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <label class="input-label mb-0">{{ t('admin.accounts.tempUnschedulable.retryEnabled') }}</label>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ t('admin.accounts.tempUnschedulable.retryHint') }}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      @click="rule.retry_enabled = !rule.retry_enabled"
+                      :class="[
+                        'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                        rule.retry_enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+                      ]"
+                    >
+                      <span
+                        :class="[
+                          'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                          rule.retry_enabled ? 'translate-x-5' : 'translate-x-0'
+                        ]"
+                      />
+                    </button>
+                  </div>
+                  <div v-if="rule.retry_enabled" class="mt-3">
+                    <label class="input-label">{{ t('admin.accounts.tempUnschedulable.retryCount') }}</label>
+                    <input
+                      v-model.number="rule.retry_count"
+                      type="number"
+                      min="1"
+                      max="10"
+                      class="input w-32"
+                      placeholder="3"
+                    />
+                    <p class="input-hint">{{ t('admin.accounts.tempUnschedulable.retryCountHint') }}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -932,7 +977,11 @@ interface TempUnschedRuleForm {
   error_code: number | null
   keywords: string
   duration_minutes: number | null
+  duration_value: number | null // UI 字段：持续时间值
+  duration_unit: 'seconds' | 'minutes' // UI 字段：持续时间单位
   description: string
+  retry_enabled: boolean // 是否启用重试
+  retry_count: number | null // 重试次数
 }
 
 // State
@@ -969,8 +1018,12 @@ const tempUnschedPresets = computed(() => [
     rule: {
       error_code: 529,
       keywords: 'overloaded, too many',
-      duration_minutes: 60,
-      description: t('admin.accounts.tempUnschedulable.presets.overloadDesc')
+      duration_minutes: null,
+      duration_value: 60,
+      duration_unit: 'seconds' as const,
+      description: t('admin.accounts.tempUnschedulable.presets.overloadDesc'),
+      retry_enabled: false,
+      retry_count: 3
     }
   },
   {
@@ -978,8 +1031,12 @@ const tempUnschedPresets = computed(() => [
     rule: {
       error_code: 429,
       keywords: 'rate limit, too many requests',
-      duration_minutes: 10,
-      description: t('admin.accounts.tempUnschedulable.presets.rateLimitDesc')
+      duration_minutes: null,
+      duration_value: 30,
+      duration_unit: 'seconds' as const,
+      description: t('admin.accounts.tempUnschedulable.presets.rateLimitDesc'),
+      retry_enabled: true,
+      retry_count: 3
     }
   },
   {
@@ -987,8 +1044,12 @@ const tempUnschedPresets = computed(() => [
     rule: {
       error_code: 503,
       keywords: 'unavailable, maintenance',
-      duration_minutes: 30,
-      description: t('admin.accounts.tempUnschedulable.presets.unavailableDesc')
+      duration_minutes: null,
+      duration_value: 30,
+      duration_unit: 'seconds' as const,
+      description: t('admin.accounts.tempUnschedulable.presets.unavailableDesc'),
+      retry_enabled: false,
+      retry_count: 3
     }
   }
 ])
@@ -1198,7 +1259,11 @@ const addTempUnschedRule = (preset?: TempUnschedRuleForm) => {
     error_code: null,
     keywords: '',
     duration_minutes: 30,
-    description: ''
+    duration_value: 30,
+    duration_unit: 'seconds',
+    description: '',
+    retry_enabled: false,
+    retry_count: 3
   })
 }
 
@@ -1220,28 +1285,67 @@ const buildTempUnschedRules = (rules: TempUnschedRuleForm[]) => {
     error_code: number
     keywords: string[]
     duration_minutes: number
+    duration_seconds?: number
     description: string
+    retry_enabled?: boolean
+    retry_count?: number
   }> = []
 
   for (const rule of rules) {
     const errorCode = Number(rule.error_code)
-    const duration = Number(rule.duration_minutes)
     const keywords = splitTempUnschedKeywords(rule.keywords)
     if (!Number.isFinite(errorCode) || errorCode < 100 || errorCode > 599) {
       continue
     }
-    if (!Number.isFinite(duration) || duration <= 0) {
+
+    // 计算持续时间
+    const durationValue = Number(rule.duration_value) || Number(rule.duration_minutes) || 0
+    if (durationValue <= 0) {
       continue
     }
+
+    // 根据单位转换为秒或分钟
+    let durationMinutes = 0
+    let durationSeconds = 0
+    if (rule.duration_unit === 'seconds') {
+      durationSeconds = Math.trunc(durationValue)
+    } else {
+      durationMinutes = Math.trunc(durationValue)
+    }
+
+    // 如果没有关键词，跳过（保持原有逻辑）
     if (keywords.length === 0) {
       continue
     }
-    out.push({
+
+    const ruleOut: {
+      error_code: number
+      keywords: string[]
+      duration_minutes: number
+      duration_seconds?: number
+      description: string
+      retry_enabled?: boolean
+      retry_count?: number
+    } = {
       error_code: Math.trunc(errorCode),
       keywords,
-      duration_minutes: Math.trunc(duration),
+      duration_minutes: durationMinutes,
       description: rule.description.trim()
-    })
+    }
+
+    // 添加秒级持续时间
+    if (durationSeconds > 0) {
+      ruleOut.duration_seconds = durationSeconds
+    }
+
+    // 添加重试配置
+    if (rule.retry_enabled) {
+      ruleOut.retry_enabled = true
+      const retryCount = Number(rule.retry_count) || 3
+      ruleOut.retry_count = Math.min(Math.max(Math.trunc(retryCount), 1), 10)
+    }
+
+    out.push(ruleOut)
   }
 
   return out
@@ -1275,11 +1379,29 @@ function loadTempUnschedRules(credentials?: Record<string, unknown>) {
 
   tempUnschedRules.value = rawRules.map((rule) => {
     const entry = rule as Record<string, unknown>
+    const durationSeconds = toPositiveNumber(entry.duration_seconds)
+    const durationMinutes = toPositiveNumber(entry.duration_minutes)
+
+    // 确定持续时间值和单位
+    let durationValue: number | null = null
+    let durationUnit: 'seconds' | 'minutes' = 'seconds'
+    if (durationSeconds && durationSeconds > 0) {
+      durationValue = durationSeconds
+      durationUnit = 'seconds'
+    } else if (durationMinutes && durationMinutes > 0) {
+      durationValue = durationMinutes
+      durationUnit = 'minutes'
+    }
+
     return {
       error_code: toPositiveNumber(entry.error_code),
       keywords: formatTempUnschedKeywords(entry.keywords),
-      duration_minutes: toPositiveNumber(entry.duration_minutes),
-      description: typeof entry.description === 'string' ? entry.description : ''
+      duration_minutes: durationMinutes,
+      duration_value: durationValue ?? 30,
+      duration_unit: durationUnit,
+      description: typeof entry.description === 'string' ? entry.description : '',
+      retry_enabled: entry.retry_enabled === true,
+      retry_count: toPositiveNumber(entry.retry_count) ?? 3
     }
   })
 }

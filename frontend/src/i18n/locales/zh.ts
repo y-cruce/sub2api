@@ -1309,13 +1309,20 @@ export default {
         ruleIndex: '规则 #{index}',
         errorCode: '错误码',
         errorCodePlaceholder: '例如 429',
+        duration: '持续时间',
         durationMinutes: '持续时间（分钟）',
         durationPlaceholder: '例如 30',
+        seconds: '秒',
+        minutes: '分钟',
         keywords: '关键词',
         keywordsPlaceholder: '例如 overloaded, too many requests',
         keywordsHint: '多个关键词用逗号分隔，匹配时必须命中其中之一。',
         description: '描述',
         descriptionPlaceholder: '可选，便于记忆规则用途',
+        retryEnabled: '启用重试',
+        retryHint: '匹配此规则时先重试，重试失败后再设置限流时间并切换账号',
+        retryCount: '重试次数',
+        retryCountHint: '重试次数范围：1-10 次',
         rulesInvalid: '请至少填写一条包含错误码、关键词和时长的规则。',
         viewDetails: '查看临时不可调度详情',
         accountName: '账号',
@@ -1335,11 +1342,11 @@ export default {
         remainingHoursMinutes: '约 {hours} 小时 {minutes} 分钟',
         presets: {
           overloadLabel: '529 过载',
-          overloadDesc: '服务过载 - 暂停 60 分钟',
+          overloadDesc: '服务过载 - 暂停 60 秒',
           rateLimitLabel: '429 限流',
-          rateLimitDesc: '触发限流 - 暂停 10 分钟',
+          rateLimitDesc: '触发限流 - 重试3次后暂停 30 秒',
           unavailableLabel: '503 维护',
-          unavailableDesc: '服务不可用 - 暂停 30 分钟'
+          unavailableDesc: '服务不可用 - 暂停 30 秒'
         }
       },
       usageWindow: {
