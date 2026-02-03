@@ -673,3 +673,326 @@ func TestRetryFlowSimulation(t *testing.T) {
 		require.Equal(t, 120, failoverRule.GetDurationSeconds(), "should use 2 minutes = 120 seconds")
 	})
 }
+
+// =============================================================================
+// 测试用例：shouldRetryUpstreamError 逻辑
+// =============================================================================
+
+func TestShouldRetryUpstreamError_429AlwaysRetry(t *testing.T) {
+	gs := &GatewayService{}
+
+	tests := []struct {
+		name        string
+		account     *Account
+		statusCode  int
+		expectRetry bool
+	}{
+		{
+			name: "429 always retry for API Key account",
+			account: &Account{
+				ID:       1,
+				Platform: "anthropic",
+				Type:     "apikey",
+			},
+			statusCode:  429,
+			expectRetry: true,
+		},
+		{
+			name: "429 always retry for OAuth account",
+			account: &Account{
+				ID:       2,
+				Platform: "anthropic",
+				Type:     "oauth",
+			},
+			statusCode:  429,
+			expectRetry: true,
+		},
+		{
+			name: "429 retry even with custom error codes configured",
+			account: &Account{
+				ID:       3,
+				Platform: "anthropic",
+				Type:     "apikey",
+				Credentials: map[string]any{
+					"custom_error_codes_enabled": true,
+					"custom_error_codes":         []any{float64(429), float64(500)},
+				},
+			},
+			statusCode:  429,
+			expectRetry: true,
+		},
+		{
+			name: "500 not retry for API Key with custom codes",
+			account: &Account{
+				ID:       4,
+				Platform: "anthropic",
+				Type:     "apikey",
+				Credentials: map[string]any{
+					"custom_error_codes_enabled": true,
+					"custom_error_codes":         []any{float64(429), float64(500)},
+				},
+			},
+			statusCode:  500,
+			expectRetry: false,
+		},
+		{
+			name: "403 retry for OAuth account",
+			account: &Account{
+				ID:       5,
+				Platform: "anthropic",
+				Type:     "oauth",
+			},
+			statusCode:  403,
+			expectRetry: true,
+		},
+		{
+			name: "500 not retry for OAuth account",
+			account: &Account{
+				ID:       6,
+				Platform: "anthropic",
+				Type:     "oauth",
+			},
+			statusCode:  500,
+			expectRetry: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := gs.shouldRetryUpstreamError(tt.account, tt.statusCode)
+			require.Equal(t, tt.expectRetry, result)
+		})
+	}
+}
+
+// =============================================================================
+// 测试用例：无规则时的默认重试行为
+// =============================================================================
+
+func TestRetryWithoutRules(t *testing.T) {
+	gs := &GatewayService{}
+
+	t.Run("no rules configured - shouldRetryWithRule returns false", func(t *testing.T) {
+		account := &Account{
+			ID:       1,
+			Platform: "anthropic",
+			Type:     "apikey",
+			// No temp_unschedulable_rules configured
+		}
+
+		shouldRetry, maxAttempts, rule := gs.shouldRetryWithRule(account, 429, []byte(`{"error": "rate limit"}`))
+		require.False(t, shouldRetry, "should not use rule-based retry without rules")
+		require.Equal(t, 0, maxAttempts)
+		require.Nil(t, rule)
+	})
+
+	t.Run("temp_unschedulable not enabled - shouldRetryWithRule returns false", func(t *testing.T) {
+		account := &Account{
+			ID:       1,
+			Platform: "anthropic",
+			Type:     "apikey",
+			Credentials: map[string]any{
+				"temp_unschedulable_enabled": false,
+				"temp_unschedulable_rules": []any{
+					map[string]any{
+						"error_code":       float64(429),
+						"keywords":         []any{"rate limit"},
+						"duration_seconds": float64(30),
+						"retry_enabled":    true,
+						"retry_count":      float64(3),
+					},
+				},
+			},
+		}
+
+		shouldRetry, _, rule := gs.shouldRetryWithRule(account, 429, []byte(`{"error": "rate limit"}`))
+		require.False(t, shouldRetry)
+		require.Nil(t, rule)
+	})
+
+	t.Run("nil account - shouldRetryWithRule returns false", func(t *testing.T) {
+		shouldRetry, _, rule := gs.shouldRetryWithRule(nil, 429, []byte(`{"error": "rate limit"}`))
+		require.False(t, shouldRetry)
+		require.Nil(t, rule)
+	})
+}
+
+// =============================================================================
+// 测试用例：关键词大小写不敏感匹配
+// =============================================================================
+
+func TestRetryRuleKeywordCaseInsensitive(t *testing.T) {
+	gs := &GatewayService{}
+
+	account := buildAccountWithRetryRules([]TempUnschedulableRule{
+		{
+			ErrorCode:       429,
+			Keywords:        []string{"Rate Limit", "TOO MANY"},
+			DurationSeconds: 30,
+			RetryEnabled:    true,
+			RetryCount:      3,
+		},
+	})
+
+	tests := []struct {
+		name         string
+		responseBody string
+		expectMatch  bool
+	}{
+		{
+			name:         "lowercase matches uppercase keyword",
+			responseBody: `{"error": "rate limit exceeded"}`,
+			expectMatch:  true,
+		},
+		{
+			name:         "uppercase matches mixed case keyword",
+			responseBody: `{"error": "RATE LIMIT ERROR"}`,
+			expectMatch:  true,
+		},
+		{
+			name:         "mixed case matches uppercase keyword",
+			responseBody: `{"error": "Too Many Requests"}`,
+			expectMatch:  true,
+		},
+		{
+			name:         "partial match works",
+			responseBody: `{"error": "you have too many active requests"}`,
+			expectMatch:  true,
+		},
+		{
+			name:         "no match for different keyword",
+			responseBody: `{"error": "server overloaded"}`,
+			expectMatch:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule, _ := gs.getRetryRuleForError(account, 429, []byte(tt.responseBody))
+			if tt.expectMatch {
+				require.NotNil(t, rule, "expected rule to match")
+			} else {
+				require.Nil(t, rule, "expected no match")
+			}
+		})
+	}
+}
+
+// =============================================================================
+// 测试用例：规则重试次数边界值
+// =============================================================================
+
+func TestRetryCountBoundaries(t *testing.T) {
+	gs := &GatewayService{}
+
+	tests := []struct {
+		name               string
+		retryCount         int
+		expectMaxAttempts  int
+		expectShouldRetry  bool
+	}{
+		{
+			name:               "retry count 0 - no retry",
+			retryCount:         0,
+			expectMaxAttempts:  0,
+			expectShouldRetry:  false,
+		},
+		{
+			name:               "retry count 1 - minimal retry",
+			retryCount:         1,
+			expectMaxAttempts:  1,
+			expectShouldRetry:  true,
+		},
+		{
+			name:               "retry count 5 - normal retry",
+			retryCount:         5,
+			expectMaxAttempts:  5,
+			expectShouldRetry:  true,
+		},
+		{
+			name:               "retry count 10 - max allowed",
+			retryCount:         10,
+			expectMaxAttempts:  10,
+			expectShouldRetry:  true,
+		},
+		{
+			name:               "retry count 15 - capped to 10",
+			retryCount:         15,
+			expectMaxAttempts:  10,
+			expectShouldRetry:  true,
+		},
+		{
+			name:               "retry count 100 - capped to 10",
+			retryCount:         100,
+			expectMaxAttempts:  10,
+			expectShouldRetry:  true,
+		},
+		{
+			name:               "retry count -1 - treated as 0",
+			retryCount:         -1,
+			expectMaxAttempts:  0,
+			expectShouldRetry:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			account := buildAccountWithRetryRules([]TempUnschedulableRule{
+				{
+					ErrorCode:       429,
+					Keywords:        []string{"rate limit"},
+					DurationSeconds: 30,
+					RetryEnabled:    true,
+					RetryCount:      tt.retryCount,
+				},
+			})
+
+			shouldRetry, maxAttempts, _ := gs.shouldRetryWithRule(account, 429, []byte(`{"error": "rate limit"}`))
+			require.Equal(t, tt.expectShouldRetry, shouldRetry, "shouldRetry mismatch")
+			require.Equal(t, tt.expectMaxAttempts, maxAttempts, "maxAttempts mismatch")
+		})
+	}
+}
+
+// =============================================================================
+// 测试用例：多个规则优先级（第一个匹配的规则生效）
+// =============================================================================
+
+func TestMultipleRulesPriority(t *testing.T) {
+	gs := &GatewayService{}
+
+	account := buildAccountWithRetryRules([]TempUnschedulableRule{
+		{
+			ErrorCode:       429,
+			Keywords:        []string{"rate limit"},
+			DurationSeconds: 10,
+			RetryEnabled:    true,
+			RetryCount:      2,
+			Description:     "first rule",
+		},
+		{
+			ErrorCode:       429,
+			Keywords:        []string{"rate limit", "too many"},
+			DurationSeconds: 60,
+			RetryEnabled:    true,
+			RetryCount:      5,
+			Description:     "second rule",
+		},
+	})
+
+	t.Run("first matching rule wins", func(t *testing.T) {
+		// "rate limit" 同时匹配两个规则，第一个应该生效
+		shouldRetry, maxAttempts, rule := gs.shouldRetryWithRule(account, 429, []byte(`{"error": "rate limit"}`))
+		require.True(t, shouldRetry)
+		require.Equal(t, 2, maxAttempts, "should use first rule's retry count")
+		require.Equal(t, 10, rule.GetDurationSeconds(), "should use first rule's duration")
+	})
+
+	t.Run("second rule matches when first doesnt", func(t *testing.T) {
+		// "too many" 只匹配第二个规则
+		shouldRetry, maxAttempts, rule := gs.shouldRetryWithRule(account, 429, []byte(`{"error": "too many requests"}`))
+		require.True(t, shouldRetry)
+		require.Equal(t, 5, maxAttempts, "should use second rule's retry count")
+		require.Equal(t, 60, rule.GetDurationSeconds(), "should use second rule's duration")
+	})
+}
