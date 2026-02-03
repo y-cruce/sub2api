@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 )
 

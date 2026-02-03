@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
+	"github.com/y-cruce/sub2api/internal/pkg/gemini"
+	"github.com/y-cruce/sub2api/internal/pkg/googleapi"
+	"github.com/y-cruce/sub2api/internal/pkg/ip"
+	"github.com/y-cruce/sub2api/internal/server/middleware"
+	"github.com/y-cruce/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

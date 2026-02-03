@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"time"
 
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
+	"github.com/y-cruce/sub2api/internal/pkg/openai"
+	"github.com/y-cruce/sub2api/internal/service"
 	"github.com/imroc/req/v3"
 )
 

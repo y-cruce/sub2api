@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/pkg/response"
+	"github.com/y-cruce/sub2api/internal/pkg/timezone"
+	"github.com/y-cruce/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

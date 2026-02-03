@@ -3,9 +3,9 @@ package routes
 import (
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/handler"
-	"github.com/Wei-Shaw/sub2api/internal/middleware"
-	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/y-cruce/sub2api/internal/handler"
+	"github.com/y-cruce/sub2api/internal/middleware"
+	servermiddleware "github.com/y-cruce/sub2api/internal/server/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"

@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/y-cruce/sub2api/ent/group"
 )
 
 // Group is the model entity for the Group schema.

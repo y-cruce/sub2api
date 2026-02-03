@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
-	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
-	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+	"github.com/y-cruce/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
+	"github.com/y-cruce/sub2api/internal/pkg/geminicli"
+	"github.com/y-cruce/sub2api/internal/pkg/googleapi"
+	"github.com/y-cruce/sub2api/internal/util/responseheaders"
+	"github.com/y-cruce/sub2api/internal/util/urlvalidator"
 
 	"github.com/gin-gonic/gin"
 )

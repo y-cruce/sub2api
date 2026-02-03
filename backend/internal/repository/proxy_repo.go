@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/proxy"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	dbent "github.com/y-cruce/sub2api/ent"
+	"github.com/y-cruce/sub2api/ent/proxy"
+	"github.com/y-cruce/sub2api/internal/service"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 )
 
 type sqlQuerier interface {

@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

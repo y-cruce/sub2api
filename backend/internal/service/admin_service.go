@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 )
 
 // AdminService interface defines admin management operations
