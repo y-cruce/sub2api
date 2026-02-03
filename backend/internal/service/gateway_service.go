@@ -1945,9 +1945,9 @@ const (
 	// 最大尝试次数（包含首次请求）。过多重试会导致请求堆积与资源耗尽。
 	maxRetryAttempts = 5
 
-	// 指数退避：第 N 次失败后的等待 = retryBaseDelay * 2^(N-1)，并且上限为 retryMaxDelay。
-	retryBaseDelay = 300 * time.Millisecond
-	retryMaxDelay  = 3 * time.Second
+	// 固定重试间隔：每次失败后等待固定时间
+	retryBaseDelay = 5 * time.Second
+	retryMaxDelay  = 5 * time.Second
 
 	// 最大重试耗时（包含请求本身耗时 + 退避等待时间）。
 	// 用于防止极端情况下 goroutine 长时间堆积导致资源耗尽。
@@ -2068,15 +2068,10 @@ func (s *GatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 }
 
 func retryBackoffDelay(attempt int) time.Duration {
-	// attempt 从 1 开始，表示第 attempt 次请求刚失败，需要等待后进行第 attempt+1 次请求。
-	if attempt <= 0 {
-		return retryBaseDelay
-	}
-	delay := retryBaseDelay * time.Duration(1<<(attempt-1))
-	if delay > retryMaxDelay {
-		return retryMaxDelay
-	}
-	return delay
+	// 固定间隔重试：每次失败后等待固定时间（3秒）
+	// 不再使用指数退避，避免 429 错误时等待时间过短导致继续被限流
+	_ = attempt // 保留参数以保持接口兼容
+	return retryBaseDelay
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
@@ -2366,6 +2361,11 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		return nil, fmt.Errorf("parse request: empty request")
 	}
 
+	// 创建独立的上游 context，不受下游客户端断开影响
+	// 这样即使下游断开，也能继续读取上游响应获取完整的 usage 信息
+	upstreamCtx, upstreamCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer upstreamCancel()
+
 	body := parsed.Body
 	reqModel := parsed.Model
 	reqStream := parsed.Stream
@@ -2415,7 +2415,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	retryStart := time.Now()
 	for attempt := 1; attempt <= maxRetryAttempts; attempt++ {
 		// 构建上游请求（每次重试需要重新构建，因为请求体需要重新读取）
-		upstreamReq, err := s.buildUpstreamRequest(ctx, c, account, body, token, tokenType, reqModel)
+		// 使用独立的 upstreamCtx，确保下游断开时不会中断上游请求
+		upstreamReq, err := s.buildUpstreamRequest(ctx, upstreamCtx, c, account, body, token, tokenType, reqModel)
 		// Capture upstream request body for ops retry of this attempt.
 		c.Set(OpsUpstreamRequestBodyKey, string(body))
 
@@ -2496,7 +2497,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					//    also downgrade tool_use/tool_result blocks to text.
 
 					filteredBody := FilterThinkingBlocksForRetry(body)
-					retryReq, buildErr := s.buildUpstreamRequest(ctx, c, account, filteredBody, token, tokenType, reqModel)
+					retryReq, buildErr := s.buildUpstreamRequest(ctx, upstreamCtx, c, account, filteredBody, token, tokenType, reqModel)
 					if buildErr == nil {
 						retryResp, retryErr := s.httpUpstream.DoWithTLS(retryReq, proxyURL, account.ID, account.Concurrency, account.IsTLSFingerprintEnabled())
 						if retryErr == nil {
@@ -2528,7 +2529,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 								if looksLikeToolSignatureError(msg2) && time.Since(retryStart) < maxRetryElapsed {
 									log.Printf("Account %d: signature retry still failing and looks tool-related, retrying with tool blocks downgraded", account.ID)
 									filteredBody2 := FilterSignatureSensitiveBlocksForRetry(body)
-									retryReq2, buildErr2 := s.buildUpstreamRequest(ctx, c, account, filteredBody2, token, tokenType, reqModel)
+									retryReq2, buildErr2 := s.buildUpstreamRequest(ctx, upstreamCtx, c, account, filteredBody2, token, tokenType, reqModel)
 									if buildErr2 == nil {
 										retryResp2, retryErr2 := s.httpUpstream.DoWithTLS(retryReq2, proxyURL, account.ID, account.Concurrency, account.IsTLSFingerprintEnabled())
 										if retryErr2 == nil {
@@ -2841,7 +2842,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	}, nil
 }
 
-func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string) (*http.Request, error) {
+// buildUpstreamRequest 构建上游请求
+// ctx: 用于内部操作（如获取指纹）的 context，与下游客户端生命周期绑定
+// httpCtx: 用于 HTTP 请求的 context，应使用独立的 context 以避免下游断开时中断上游读取
+func (s *GatewayService) buildUpstreamRequest(ctx context.Context, httpCtx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string) (*http.Request, error) {
 	// 确定目标URL
 	targetURL := claudeAPIURL
 	if account.Type == AccountTypeAPIKey {
@@ -2877,7 +2881,8 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
+	// 使用独立的 httpCtx 创建请求，这样下游断开时不会中断上游读取
+	req, err := http.NewRequestWithContext(httpCtx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -3278,8 +3283,10 @@ type streamingResult struct {
 }
 
 func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string) (*streamingResult, error) {
-	// 更新5h窗口状态
-	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
+	// 更新5h窗口状态，使用独立的 context 避免客户端断开导致更新失败
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dbCancel()
+	s.rateLimitService.UpdateSessionWindow(dbCtx, account, resp.Header)
 
 	if s.cfg != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.cfg.Security.ResponseHeaders)
@@ -3372,8 +3379,19 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 	needModelReplace := originalModel != mappedModel
 	clientDisconnected := false // 客户端断开标志，断开后继续读取上游以获取完整usage
 
+	// 客户端断开后最多等待的时间（30秒），避免无限等待上游
+	const maxDrainDuration = 30 * time.Second
+
+	// drainTimer: 客户端断开后的超时 timer，确保 select 不会永久阻塞
+	// 初始为 nil，客户端断开时才创建
+	var drainTimer <-chan time.Time
+
 	for {
 		select {
+		case <-drainTimer:
+			// 客户端断开后超过最大 drain 时间，返回已收集的 usage
+			log.Printf("Drain timeout after client disconnect (max %v), returning collected usage", maxDrainDuration)
+			return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, nil
 		case ev, ok := <-events:
 			if !ok {
 				// 上游完成，返回结果
@@ -3382,7 +3400,11 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if ev.err != nil {
 				// 检测 context 取消（客户端断开会导致 context 取消，进而影响上游读取）
 				if errors.Is(ev.err, context.Canceled) || errors.Is(ev.err, context.DeadlineExceeded) {
-					log.Printf("Context canceled during streaming, returning collected usage")
+					log.Printf("Context canceled during streaming, sending end signal and returning collected usage")
+					// 关键：向下游发送错误事件，让客户端知道流已结束，避免无限等待
+					if !clientDisconnected {
+						sendErrorEvent("stream_interrupted")
+					}
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, nil
 				}
 				// 客户端已通过写入失败检测到断开，上游也出错了，返回已收集的 usage
@@ -3422,7 +3444,9 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if !clientDisconnected {
 				if _, err := fmt.Fprintf(w, "%s\n", line); err != nil {
 					clientDisconnected = true
-					log.Printf("Client disconnected during streaming, continuing to drain upstream for billing")
+					// 创建 drain timeout timer，确保 select 不会永久阻塞
+					drainTimer = time.After(maxDrainDuration)
+					log.Printf("Client disconnected during streaming, continuing to drain upstream for billing (max %v)", maxDrainDuration)
 				} else {
 					flusher.Flush()
 				}
@@ -3542,8 +3566,10 @@ func (s *GatewayService) parseSSEUsage(data string, usage *ClaudeUsage) {
 }
 
 func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*ClaudeUsage, error) {
-	// 更新5h窗口状态
-	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
+	// 更新5h窗口状态，使用独立的 context 避免客户端断开导致更新失败
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dbCancel()
+	s.rateLimitService.UpdateSessionWindow(dbCtx, account, resp.Header)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
