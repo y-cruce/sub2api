@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -14,6 +15,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// maskAPIKey 对 API key 进行脱敏处理，只显示前缀和后4位
+func maskAPIKey(key string) string {
+	if len(key) <= 8 {
+		return "***"
+	}
+	return key[:4] + "..." + key[len(key)-4:]
+}
+
 // NewAPIKeyAuthMiddleware 创建 API Key 认证中间件
 func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
 	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg))
@@ -22,9 +31,16 @@ func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionS
 // apiKeyAuthWithSubscription API Key认证中间件（支持订阅验证）
 func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		clientIP := ip.GetClientIP(c)
+
 		queryKey := strings.TrimSpace(c.Query("key"))
 		queryApiKey := strings.TrimSpace(c.Query("api_key"))
 		if queryKey != "" || queryApiKey != "" {
+			slog.Warn("[APIKeyAuth] API key in query parameter (deprecated)",
+				"client_ip", clientIP,
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+			)
 			AbortWithError(c, 400, "api_key_in_query_deprecated", "API key in query parameter is deprecated. Please use Authorization header instead.")
 			return
 		}
@@ -32,27 +48,41 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// 尝试从Authorization header中提取API key (Bearer scheme)
 		authHeader := c.GetHeader("Authorization")
 		var apiKeyString string
+		var keySource string
 
 		if authHeader != "" {
 			// 验证Bearer scheme
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				apiKeyString = parts[1]
+				keySource = "Authorization"
 			}
 		}
 
 		// 如果Authorization header中没有，尝试从x-api-key header中提取
 		if apiKeyString == "" {
 			apiKeyString = c.GetHeader("x-api-key")
+			if apiKeyString != "" {
+				keySource = "x-api-key"
+			}
 		}
 
 		// 如果x-api-key header中没有，尝试从x-goog-api-key header中提取（Gemini CLI兼容）
 		if apiKeyString == "" {
 			apiKeyString = c.GetHeader("x-goog-api-key")
+			if apiKeyString != "" {
+				keySource = "x-goog-api-key"
+			}
 		}
 
 		// 如果所有header都没有API key
 		if apiKeyString == "" {
+			slog.Debug("[APIKeyAuth] No API key provided",
+				"client_ip", clientIP,
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+				"user_agent", c.Request.UserAgent(),
+			)
 			AbortWithError(c, 401, "API_KEY_REQUIRED", "API key is required in Authorization header (Bearer scheme), x-api-key header, or x-goog-api-key header")
 			return
 		}
@@ -61,15 +91,40 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		apiKey, err := apiKeyService.GetByKey(c.Request.Context(), apiKeyString)
 		if err != nil {
 			if errors.Is(err, service.ErrAPIKeyNotFound) {
+				slog.Warn("[APIKeyAuth] Invalid API key - not found in database",
+					"client_ip", clientIP,
+					"method", c.Request.Method,
+					"path", c.Request.URL.Path,
+					"key_source", keySource,
+					"key_masked", maskAPIKey(apiKeyString),
+					"key_length", len(apiKeyString),
+					"user_agent", c.Request.UserAgent(),
+				)
 				AbortWithError(c, 401, "INVALID_API_KEY", "Invalid API key")
 				return
 			}
+			slog.Error("[APIKeyAuth] Failed to validate API key",
+				"client_ip", clientIP,
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+				"key_source", keySource,
+				"key_masked", maskAPIKey(apiKeyString),
+				"error", err,
+			)
 			AbortWithError(c, 500, "INTERNAL_ERROR", "Failed to validate API key")
 			return
 		}
 
 		// 检查API key是否激活
 		if !apiKey.IsActive() {
+			slog.Warn("[APIKeyAuth] API key is disabled",
+				"client_ip", clientIP,
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+				"key_id", apiKey.ID,
+				"key_masked", maskAPIKey(apiKeyString),
+				"user_id", apiKey.UserID,
+			)
 			AbortWithError(c, 401, "API_KEY_DISABLED", "API key is disabled")
 			return
 		}
@@ -77,9 +132,15 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// 检查 IP 限制（白名单/黑名单）
 		// 注意：错误信息故意模糊，避免暴露具体的 IP 限制机制
 		if len(apiKey.IPWhitelist) > 0 || len(apiKey.IPBlacklist) > 0 {
-			clientIP := ip.GetClientIP(c)
 			allowed, _ := ip.CheckIPRestriction(clientIP, apiKey.IPWhitelist, apiKey.IPBlacklist)
 			if !allowed {
+				slog.Warn("[APIKeyAuth] IP restriction denied access",
+					"client_ip", clientIP,
+					"method", c.Request.Method,
+					"path", c.Request.URL.Path,
+					"key_id", apiKey.ID,
+					"user_id", apiKey.UserID,
+				)
 				AbortWithError(c, 403, "ACCESS_DENIED", "Access denied")
 				return
 			}
