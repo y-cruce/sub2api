@@ -3187,11 +3187,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 
 			// 查找匹配的账号规则，获取自定义重试次数
 			effectiveMaxRetry := maxRetryAttempts
-			if rule, _ := s.getRetryRuleForError(account, resp.StatusCode, respBody); rule != nil {
-				if ruleRetryCount := rule.GetRetryCount(); ruleRetryCount > 0 {
-					effectiveMaxRetry = ruleRetryCount
-					log.Printf("Account %d: using rule retry count %d for status %d", account.ID, ruleRetryCount, resp.StatusCode)
-				}
+			if shouldUseRule, ruleMaxAttempts, _ := s.shouldRetryWithRule(account, resp.StatusCode, respBody); shouldUseRule && ruleMaxAttempts > 0 {
+				effectiveMaxRetry = ruleMaxAttempts
+				log.Printf("Account %d: using rule retry count %d for status %d", account.ID, ruleMaxAttempts, resp.StatusCode)
 			}
 
 			if attempt < effectiveMaxRetry {
