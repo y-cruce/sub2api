@@ -68,6 +68,7 @@ security:
       - "generativelanguage.googleapis.com"
       - "cloudcode-pa.googleapis.com"
       - "*.openai.azure.com"
+      - "www.kimi.com"
     # Allowed hosts for pricing data download
     # 允许下载定价数据的主机列表
     pricing_hosts:
@@ -171,6 +172,9 @@ gateway:
   # Allow failover on selected 400 errors (default: off)
   # 允许在特定 400 错误时进行故障转移（默认：关闭）
   failover_on_400: false
+  # Retry delay in seconds when upstream returns error (default: 5)
+  # 上游返回错误时的重试间隔（秒），默认 5 秒
+  retry_delay_seconds: 5
   # Scheduling configuration
   # 调度配置
   scheduling:

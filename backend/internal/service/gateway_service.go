@@ -1945,13 +1945,12 @@ const (
 	// 最大尝试次数（包含首次请求）。过多重试会导致请求堆积与资源耗尽。
 	maxRetryAttempts = 5
 
-	// 固定重试间隔：每次失败后等待固定时间
-	retryBaseDelay = 5 * time.Second
-	retryMaxDelay  = 5 * time.Second
-
 	// 最大重试耗时（包含请求本身耗时 + 退避等待时间）。
 	// 用于防止极端情况下 goroutine 长时间堆积导致资源耗尽。
-	maxRetryElapsed = 10 * time.Second
+	maxRetryElapsed = 30 * time.Second
+
+	// 默认重试间隔（秒）
+	defaultRetryDelaySeconds = 5
 )
 
 func (s *GatewayService) shouldRetryUpstreamError(account *Account, statusCode int) bool {
@@ -2067,11 +2066,13 @@ func (s *GatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 	}
 }
 
-func retryBackoffDelay(attempt int) time.Duration {
-	// 固定间隔重试：每次失败后等待固定时间（3秒）
-	// 不再使用指数退避，避免 429 错误时等待时间过短导致继续被限流
-	_ = attempt // 保留参数以保持接口兼容
-	return retryBaseDelay
+// getRetryDelay 获取重试间隔时间
+// 优先从配置读取 gateway.retry_delay_seconds，否则使用默认值
+func (s *GatewayService) getRetryDelay() time.Duration {
+	if s.cfg != nil && s.cfg.Gateway.RetryDelaySeconds > 0 {
+		return time.Duration(s.cfg.Gateway.RetryDelaySeconds) * time.Second
+	}
+	return defaultRetryDelaySeconds * time.Second
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
@@ -2590,6 +2591,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			shouldRetryDefault := s.shouldRetryUpstreamError(account, resp.StatusCode)
 
 			// 确定是否重试以及最大重试次数
+			// 优先级：规则配置 > 系统默认
 			shouldRetry := shouldRetryRule || shouldRetryDefault
 			effectiveMaxAttempts := maxRetryAttempts
 			if shouldRetryRule && ruleMaxAttempts > 0 {
@@ -2608,7 +2610,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					break
 				}
 
-				delay := retryBackoffDelay(attempt)
+				delay := s.getRetryDelay()
 				remaining := maxRetryElapsed - elapsed
 				if delay > remaining {
 					delay = remaining
