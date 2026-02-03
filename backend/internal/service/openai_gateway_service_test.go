@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 type stubOpenAIAccountRepo struct {

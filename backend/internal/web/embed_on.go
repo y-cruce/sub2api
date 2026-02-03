@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/server/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/y-cruce/sub2api/internal/server/middleware"
 )
 
 const (

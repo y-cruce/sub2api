@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/y-cruce/sub2api/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/y-cruce/sub2api/internal/pkg/openai"
 )
 
 type OpenAIOAuthServiceSuite struct {

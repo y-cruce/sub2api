@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"strings"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 const (

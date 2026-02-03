@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 )
 
 type accountRepoStubForAdminList struct {

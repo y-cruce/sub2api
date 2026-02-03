@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/y-cruce/sub2api/internal/config"
 	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
-	"github.com/stretchr/testify/require"
 )
 
 type cleanupDeleteResponse struct {

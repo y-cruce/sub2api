@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 )
 
 func TestStripSignatureSensitiveBlocksFromClaudeRequest(t *testing.T) {

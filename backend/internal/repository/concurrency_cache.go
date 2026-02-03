@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/y-cruce/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
+	"github.com/y-cruce/sub2api/internal/service"
 )
 
 // 并发控制缓存常量定义

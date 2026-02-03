@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
+	"github.com/y-cruce/sub2api/internal/service"
 )
 
 const (

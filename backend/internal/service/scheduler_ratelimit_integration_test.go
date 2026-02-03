@@ -18,10 +18,10 @@ import (
 
 // mockAccountRepoForRateLimit 模拟账号仓库，追踪限流状态
 type mockAccountRepoForRateLimit struct {
-	mu              sync.RWMutex
-	accounts        []Account
-	rateLimitedIDs  map[int64]time.Time // 记录被限流的账号
-	rateLimitCalls  int32               // 记录 SetRateLimited 调用次数
+	mu             sync.RWMutex
+	accounts       []Account
+	rateLimitedIDs map[int64]time.Time // 记录被限流的账号
+	rateLimitCalls int32               // 记录 SetRateLimited 调用次数
 }
 
 func newMockAccountRepoForRateLimit(accounts []Account) *mockAccountRepoForRateLimit {

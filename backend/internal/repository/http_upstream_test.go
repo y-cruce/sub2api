@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 // HTTPUpstreamSuite HTTP 上游服务测试套件

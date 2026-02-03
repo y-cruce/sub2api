@@ -6,10 +6,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/imroc/req/v3"
 	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
 	"github.com/y-cruce/sub2api/internal/pkg/openai"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/imroc/req/v3"
 )
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client

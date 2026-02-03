@@ -15,13 +15,13 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/y-cruce/sub2api/internal/pkg/claude"
 	"github.com/y-cruce/sub2api/internal/pkg/geminicli"
 	"github.com/y-cruce/sub2api/internal/pkg/openai"
 	"github.com/y-cruce/sub2api/internal/util/urlvalidator"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 // sseDataPrefix matches SSE data lines with optional whitespace after colon.

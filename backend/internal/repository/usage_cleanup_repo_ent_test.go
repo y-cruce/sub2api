@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	dbent "github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/ent/enttest"
 	dbusagecleanuptask "github.com/y-cruce/sub2api/ent/usagecleanuptask"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/stretchr/testify/require"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"

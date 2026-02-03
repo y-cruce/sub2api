@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
 	dbent "github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/ent/accountgroup"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/stretchr/testify/suite"
 )
 
 type AccountRepoSuite struct {

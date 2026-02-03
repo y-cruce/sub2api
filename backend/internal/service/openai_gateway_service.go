@@ -19,11 +19,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/y-cruce/sub2api/internal/pkg/openai"
 	"github.com/y-cruce/sub2api/internal/util/responseheaders"
 	"github.com/y-cruce/sub2api/internal/util/urlvalidator"
-	"github.com/gin-gonic/gin"
 )
 
 const (

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/service"
 	"github.com/lib/pq"
+	"github.com/y-cruce/sub2api/internal/service"
 )
 
 type opsRepository struct {

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 const (

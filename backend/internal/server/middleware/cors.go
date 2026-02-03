@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 var corsWarningOnce sync.Once

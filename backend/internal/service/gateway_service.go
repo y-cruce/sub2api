@@ -22,14 +22,14 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/y-cruce/sub2api/internal/pkg/claude"
 	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
 	"github.com/y-cruce/sub2api/internal/util/responseheaders"
 	"github.com/y-cruce/sub2api/internal/util/urlvalidator"
-	"github.com/google/uuid"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 
 	"github.com/gin-gonic/gin"
 )
@@ -2576,31 +2576,6 @@ func (s *GatewayService) getRetryRuleForError(account *Account, statusCode int, 
 		}
 		// 只返回启用了重试的规则
 		if !rule.RetryEnabled {
-			continue
-		}
-		// 检查关键词匹配
-		for _, keyword := range rule.Keywords {
-			if strings.Contains(bodyStr, strings.ToLower(keyword)) {
-				return rule, keyword
-			}
-		}
-	}
-	return nil, ""
-}
-
-// getRetryRuleForErrorWithoutRetryCheck 根据状态码和响应体查找匹配的规则（用于 failover）
-// 不检查 RetryEnabled，用于确定 failover 时的临时禁用时间
-func (s *GatewayService) getRetryRuleForErrorWithoutRetryCheck(account *Account, statusCode int, responseBody []byte) (*TempUnschedulableRule, string) {
-	if account == nil || !account.IsTempUnschedulableEnabled() {
-		return nil, ""
-	}
-
-	rules := account.GetTempUnschedulableRules()
-	bodyStr := strings.ToLower(string(responseBody))
-
-	for i := range rules {
-		rule := &rules[i]
-		if rule.ErrorCode != statusCode {
 			continue
 		}
 		// 检查关键词匹配

@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	errors2 "github.com/y-cruce/sub2api/internal/pkg/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	errors2 "github.com/y-cruce/sub2api/internal/pkg/errors"
 )
 
 func TestErrorWithDetails(t *testing.T) {

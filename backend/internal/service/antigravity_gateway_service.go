@@ -17,9 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 )
 
 const (

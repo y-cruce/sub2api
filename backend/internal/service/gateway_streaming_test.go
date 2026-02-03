@@ -19,7 +19,7 @@ func TestIndependentContext_HttpCtxNotAffectedByCtxCancel(t *testing.T) {
 	// 模拟 Forward 函数中的 context 创建逻辑
 	// ctx 是下游客户端的 context
 	ctx, ctxCancel := context.WithCancel(context.Background())
-	
+
 	// httpCtx 是独立的上游 context
 	httpCtx, httpCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer httpCancel()
@@ -130,7 +130,7 @@ func TestDrainTimeout_TimerApproach(t *testing.T) {
 
 	t.Run("drainTimer 确保 select 不会永久阻塞", func(t *testing.T) {
 		// 模拟实际场景：events channel 无数据，intervalCh 为 nil
-		events := make(chan struct{}) // 空 channel，永远不会有数据
+		events := make(chan struct{})   // 空 channel，永远不会有数据
 		var intervalCh <-chan time.Time // nil
 
 		// 客户端断开，创建 drainTimer

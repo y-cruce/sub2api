@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	dbent "github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/stretchr/testify/require"
 )
 
 func mustCreateUser(t *testing.T, client *dbent.Client, u *service.User) *service.User {

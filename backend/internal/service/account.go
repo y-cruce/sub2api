@@ -55,8 +55,8 @@ type TempUnschedulableRule struct {
 	DurationMinutes int      `json:"duration_minutes"`
 	DurationSeconds int      `json:"duration_seconds,omitempty"` // 秒级持续时间，优先于 DurationMinutes
 	Description     string   `json:"description"`
-	RetryEnabled    bool     `json:"retry_enabled,omitempty"`    // 是否启用重试
-	RetryCount      int      `json:"retry_count,omitempty"`      // 重试次数 (1-10)
+	RetryEnabled    bool     `json:"retry_enabled,omitempty"` // 是否启用重试
+	RetryCount      int      `json:"retry_count,omitempty"`   // 重试次数 (1-10)
 }
 
 // GetDurationSeconds 计算实际持续时间（秒），优先使用 DurationSeconds

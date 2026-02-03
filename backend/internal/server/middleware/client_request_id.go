@@ -3,9 +3,9 @@ package middleware
 import (
 	"context"
 
-	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
 )
 
 // ClientRequestID ensures every request has a unique client_request_id in request.Context().

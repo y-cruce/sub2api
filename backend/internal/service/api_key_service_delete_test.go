@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 )
 
 // apiKeyRepoStub 是 APIKeyRepository 接口的测试桩实现。

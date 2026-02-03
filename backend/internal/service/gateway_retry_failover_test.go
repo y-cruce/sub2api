@@ -142,13 +142,13 @@ func TestGetRetryRuleForError_MultipleRules(t *testing.T) {
 	})
 
 	tests := []struct {
-		name                string
-		statusCode          int
-		responseBody        string
-		expectMatch         bool
-		expectRetryEnabled  bool
-		expectRetryCount    int
-		expectDurationSec   int
+		name               string
+		statusCode         int
+		responseBody       string
+		expectMatch        bool
+		expectRetryEnabled bool
+		expectRetryCount   int
+		expectDurationSec  int
 	}{
 		{
 			name:               "429 rate limit - matches first rule with retry",
@@ -212,11 +212,6 @@ func TestGetRetryRuleForError_NoRetryRuleSkipped(t *testing.T) {
 	// getRetryRuleForError 应该返回 nil，因为规则禁用了重试
 	rule, _ := gs.getRetryRuleForError(account, 529, []byte(`{"error": "server overloaded"}`))
 	require.Nil(t, rule, "getRetryRuleForError should not return rules with retry disabled")
-
-	// 但 getRetryRuleForErrorWithoutRetryCheck 应该返回规则（用于 failover）
-	failoverRule, _ := gs.getRetryRuleForErrorWithoutRetryCheck(account, 529, []byte(`{"error": "server overloaded"}`))
-	require.NotNil(t, failoverRule, "getRetryRuleForErrorWithoutRetryCheck should return the rule")
-	require.Equal(t, 300, failoverRule.GetDurationSeconds())
 }
 
 // =============================================================================
@@ -322,81 +317,17 @@ func TestShouldRetryWithRule(t *testing.T) {
 }
 
 // =============================================================================
-// 测试用例：getRetryRuleForErrorWithoutRetryCheck (Failover场景)
-// =============================================================================
-
-func TestGetRetryRuleForErrorWithoutRetryCheck(t *testing.T) {
-	account := buildAccountWithRetryRules([]TempUnschedulableRule{
-		{
-			ErrorCode:       429,
-			Keywords:        []string{"rate limit"},
-			DurationSeconds: 30,
-			RetryEnabled:    false, // retry disabled
-			RetryCount:      0,
-		},
-		{
-			ErrorCode:       529,
-			Keywords:        []string{"overloaded"},
-			DurationMinutes: 2,
-			RetryEnabled:    false,
-		},
-	})
-
-	tests := []struct {
-		name              string
-		statusCode        int
-		responseBody      string
-		expectMatch       bool
-		expectDurationSec int
-	}{
-		{
-			name:              "429 rule found for failover (even without retry)",
-			statusCode:        429,
-			responseBody:      `{"error": "rate limit exceeded"}`,
-			expectMatch:       true,
-			expectDurationSec: 30,
-		},
-		{
-			name:              "529 rule found for failover",
-			statusCode:        529,
-			responseBody:      `{"message": "service overloaded"}`,
-			expectMatch:       true,
-			expectDurationSec: 120, // 2 * 60
-		},
-		{
-			name:         "no rule for 500",
-			statusCode:   500,
-			responseBody: `{"error": "server error"}`,
-			expectMatch:  false,
-		},
-	}
-
-	gs := &GatewayService{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rule, _ := gs.getRetryRuleForErrorWithoutRetryCheck(account, tt.statusCode, []byte(tt.responseBody))
-			if tt.expectMatch {
-				require.NotNil(t, rule)
-				require.Equal(t, tt.expectDurationSec, rule.GetDurationSeconds())
-			} else {
-				require.Nil(t, rule)
-			}
-		})
-	}
-}
-
-// =============================================================================
 // 测试用例：Failover 场景下的限流时间设置
 // =============================================================================
 
 func TestFailoverScenarios(t *testing.T) {
 	tests := []struct {
-		name                     string
-		rules                    []TempUnschedulableRule
-		statusCode               int
-		responseBody             string
-		expectRateLimitDuration  int  // 期望的限流时间（秒），0表示无自定义限流
-		expectFailover           bool // 是否应触发failover
+		name                    string
+		rules                   []TempUnschedulableRule
+		statusCode              int
+		responseBody            string
+		expectRateLimitDuration int  // 期望的限流时间（秒），0表示无自定义限流
+		expectFailover          bool // 是否应触发failover
 	}{
 		{
 			name: "429 retry exhausted - use rule duration for rate limit",
@@ -415,13 +346,13 @@ func TestFailoverScenarios(t *testing.T) {
 			expectFailover:          true,
 		},
 		{
-			name: "429 no retry - direct failover with rule duration",
+			name: "429 with retry - direct failover with rule duration",
 			rules: []TempUnschedulableRule{
 				{
 					ErrorCode:       429,
 					Keywords:        []string{"rate limit"},
 					DurationMinutes: 1,
-					RetryEnabled:    false,
+					RetryEnabled:    true,
 				},
 			},
 			statusCode:              429,
@@ -436,7 +367,7 @@ func TestFailoverScenarios(t *testing.T) {
 					ErrorCode:       529,
 					Keywords:        []string{"overloaded"},
 					DurationMinutes: 10,
-					RetryEnabled:    false,
+					RetryEnabled:    true,
 				},
 			},
 			statusCode:              529,
@@ -468,8 +399,8 @@ func TestFailoverScenarios(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			account := buildAccountWithRetryRules(tt.rules)
 
-			// 获取用于failover的规则（不检查retry）
-			rule, _ := gs.getRetryRuleForErrorWithoutRetryCheck(account, tt.statusCode, []byte(tt.responseBody))
+			// 获取匹配的规则（启用重试的）
+			rule, _ := gs.getRetryRuleForError(account, tt.statusCode, []byte(tt.responseBody))
 
 			if tt.expectFailover && tt.expectRateLimitDuration > 0 {
 				require.NotNil(t, rule, "expected rule for failover")
@@ -642,11 +573,11 @@ func TestRetryFlowSimulation(t *testing.T) {
 		require.Equal(t, 3, maxAttempts, "max attempts should be 3")
 		require.NotNil(t, rule)
 
-		// 模拟重试耗尽后获取failover规则
-		failoverRule, _ := gs.getRetryRuleForErrorWithoutRetryCheck(account, 429, responseBody)
-		require.NotNil(t, failoverRule)
-		require.Equal(t, 30, failoverRule.GetDurationSeconds(),
-			"failover should use rule's duration for rate limiting")
+		// 验证规则可以正常获取
+		foundRule, _ := gs.getRetryRuleForError(account, 429, responseBody)
+		require.NotNil(t, foundRule)
+		require.Equal(t, 30, foundRule.GetDurationSeconds(),
+			"should use rule's duration")
 	})
 
 	t.Run("simulate no retry rule - direct failover", func(t *testing.T) {
@@ -662,15 +593,10 @@ func TestRetryFlowSimulation(t *testing.T) {
 		gs := &GatewayService{}
 		responseBody := []byte(`{"error": "rate limit exceeded"}`)
 
-		// 检查是否应该重试 - 不应该
+		// 检查是否应该重试 - 不应该（因为 retry disabled）
 		shouldRetry, _, rule := gs.shouldRetryWithRule(account, 429, responseBody)
 		require.False(t, shouldRetry, "should not retry when retry is disabled")
 		require.Nil(t, rule)
-
-		// 但是 failover 时应该能获取到规则
-		failoverRule, _ := gs.getRetryRuleForErrorWithoutRetryCheck(account, 429, responseBody)
-		require.NotNil(t, failoverRule, "should get rule for failover duration")
-		require.Equal(t, 120, failoverRule.GetDurationSeconds(), "should use 2 minutes = 120 seconds")
 	})
 }
 
@@ -886,52 +812,52 @@ func TestRetryCountBoundaries(t *testing.T) {
 	gs := &GatewayService{}
 
 	tests := []struct {
-		name               string
-		retryCount         int
-		expectMaxAttempts  int
-		expectShouldRetry  bool
+		name              string
+		retryCount        int
+		expectMaxAttempts int
+		expectShouldRetry bool
 	}{
 		{
-			name:               "retry count 0 - no retry",
-			retryCount:         0,
-			expectMaxAttempts:  0,
-			expectShouldRetry:  false,
+			name:              "retry count 0 - no retry",
+			retryCount:        0,
+			expectMaxAttempts: 0,
+			expectShouldRetry: false,
 		},
 		{
-			name:               "retry count 1 - minimal retry",
-			retryCount:         1,
-			expectMaxAttempts:  1,
-			expectShouldRetry:  true,
+			name:              "retry count 1 - minimal retry",
+			retryCount:        1,
+			expectMaxAttempts: 1,
+			expectShouldRetry: true,
 		},
 		{
-			name:               "retry count 5 - normal retry",
-			retryCount:         5,
-			expectMaxAttempts:  5,
-			expectShouldRetry:  true,
+			name:              "retry count 5 - normal retry",
+			retryCount:        5,
+			expectMaxAttempts: 5,
+			expectShouldRetry: true,
 		},
 		{
-			name:               "retry count 10 - max allowed",
-			retryCount:         10,
-			expectMaxAttempts:  10,
-			expectShouldRetry:  true,
+			name:              "retry count 10 - max allowed",
+			retryCount:        10,
+			expectMaxAttempts: 10,
+			expectShouldRetry: true,
 		},
 		{
-			name:               "retry count 15 - capped to 10",
-			retryCount:         15,
-			expectMaxAttempts:  10,
-			expectShouldRetry:  true,
+			name:              "retry count 15 - capped to 10",
+			retryCount:        15,
+			expectMaxAttempts: 10,
+			expectShouldRetry: true,
 		},
 		{
-			name:               "retry count 100 - capped to 10",
-			retryCount:         100,
-			expectMaxAttempts:  10,
-			expectShouldRetry:  true,
+			name:              "retry count 100 - capped to 10",
+			retryCount:        100,
+			expectMaxAttempts: 10,
+			expectShouldRetry: true,
 		},
 		{
-			name:               "retry count -1 - treated as 0",
-			retryCount:         -1,
-			expectMaxAttempts:  0,
-			expectShouldRetry:  false,
+			name:              "retry count -1 - treated as 0",
+			retryCount:        -1,
+			expectMaxAttempts: 0,
+			expectShouldRetry: false,
 		},
 	}
 

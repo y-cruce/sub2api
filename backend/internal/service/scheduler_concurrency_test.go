@@ -501,8 +501,8 @@ func TestAccountIsSchedulable_AllConditions(t *testing.T) {
 		{
 			name: "temp unschedulable - future",
 			account: Account{
-				Status:               StatusActive,
-				Schedulable:          true,
+				Status:                 StatusActive,
+				Schedulable:            true,
 				TempUnschedulableUntil: &future,
 			},
 			expectSchedule: false,
@@ -519,20 +519,20 @@ func TestAccountIsSchedulable_AllConditions(t *testing.T) {
 		{
 			name: "expired account with auto pause",
 			account: Account{
-				Status:            StatusActive,
-				Schedulable:       true,
+				Status:             StatusActive,
+				Schedulable:        true,
 				AutoPauseOnExpired: true,
-				ExpiresAt:         &past,
+				ExpiresAt:          &past,
 			},
 			expectSchedule: false,
 		},
 		{
 			name: "expired account without auto pause",
 			account: Account{
-				Status:            StatusActive,
-				Schedulable:       true,
+				Status:             StatusActive,
+				Schedulable:        true,
 				AutoPauseOnExpired: false,
-				ExpiresAt:         &past,
+				ExpiresAt:          &past,
 			},
 			expectSchedule: true,
 		},

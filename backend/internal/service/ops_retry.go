@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
+	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
 )
 
 const (

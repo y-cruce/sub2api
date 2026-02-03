@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"github.com/redis/go-redis/v9"
 	"github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/y-cruce/sub2api/internal/handler"
@@ -16,7 +17,6 @@ import (
 	"github.com/y-cruce/sub2api/internal/server"
 	"github.com/y-cruce/sub2api/internal/server/middleware"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/redis/go-redis/v9"
 	"log"
 	"net/http"
 	"time"

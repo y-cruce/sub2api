@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/y-cruce/sub2api/internal/handler/dto"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/pkg/response"
 	"github.com/y-cruce/sub2api/internal/server/middleware"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 )
 
 type cleanupRepoStub struct {

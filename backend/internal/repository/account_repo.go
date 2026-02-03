@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lib/pq"
 	dbent "github.com/y-cruce/sub2api/ent"
 	dbaccount "github.com/y-cruce/sub2api/ent/account"
 	dbaccountgroup "github.com/y-cruce/sub2api/ent/accountgroup"
@@ -27,7 +28,6 @@ import (
 	dbproxy "github.com/y-cruce/sub2api/ent/proxy"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/lib/pq"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqljson"

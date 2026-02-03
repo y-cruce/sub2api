@@ -6,12 +6,12 @@ import (
 	"errors"
 	"log"
 
+	"github.com/lib/pq"
 	dbent "github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/ent/apikey"
 	"github.com/y-cruce/sub2api/ent/group"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/lib/pq"
 )
 
 type sqlExecutor interface {

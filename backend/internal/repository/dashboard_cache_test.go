@@ -3,8 +3,8 @@ package repository
 import (
 	"testing"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 func TestNewDashboardCacheKeyPrefix(t *testing.T) {

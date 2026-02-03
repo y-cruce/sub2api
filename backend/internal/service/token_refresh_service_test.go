@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 type tokenRefreshAccountRepo struct {

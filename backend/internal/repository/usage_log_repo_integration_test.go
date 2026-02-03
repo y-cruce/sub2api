@@ -9,12 +9,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/stretchr/testify/suite"
 	dbent "github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/pkg/timezone"
 	"github.com/y-cruce/sub2api/internal/pkg/usagestats"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/stretchr/testify/suite"
 )
 
 type UsageLogRepoSuite struct {
