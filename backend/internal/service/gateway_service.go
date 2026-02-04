@@ -2576,12 +2576,23 @@ func (s *GatewayService) isModelSupportedByAccount(account *Account, requestedMo
 		// Antigravity 平台使用专门的模型支持检查
 		return IsAntigravityModelSupported(requestedModel)
 	}
-	if account.Platform == PlatformAnthropic {
-		requestedModel = normalizeClaudeModelForAnthropic(requestedModel)
-	}
 	// Gemini API Key 账户直接透传，由上游判断模型是否支持
 	if account.Platform == PlatformGemini && account.Type == AccountTypeAPIKey {
 		return true
+	}
+	// Anthropic 平台：先精确匹配，再尝试前缀匹配
+	// 兼容 model_mapping 中 key 为完整模型名或前缀的情况
+	if account.Platform == PlatformAnthropic {
+		// 先尝试精确匹配（如 claude-opus-4-5-20251101）
+		if account.IsModelSupported(requestedModel) {
+			return true
+		}
+		// 再尝试前缀匹配（如 claude-opus-4-5）
+		normalized := normalizeClaudeModelForAnthropic(requestedModel)
+		if normalized != requestedModel {
+			return account.IsModelSupported(normalized)
+		}
+		return false
 	}
 	// 其他平台使用账户的模型支持检查
 	return account.IsModelSupported(requestedModel)

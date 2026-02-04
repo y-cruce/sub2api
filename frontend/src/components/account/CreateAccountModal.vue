@@ -2228,7 +2228,8 @@ watch(
     } else {
       resetForm()
     }
-  }
+  },
+  { immediate: true }
 )
 
 // Sync form.type based on accountCategory, addMethod, and antigravityAccountType

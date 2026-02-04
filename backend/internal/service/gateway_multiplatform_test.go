@@ -1055,6 +1055,42 @@ func TestGatewayService_isModelSupportedByAccount(t *testing.T) {
 			model:    "claude-3-5-sonnet-20241022",
 			expected: true,
 		},
+		{
+			name: "Anthropic平台-前缀匹配-mapping中为前缀key",
+			account: &Account{
+				Platform:    PlatformAnthropic,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5": "claude-opus-4-5-20251101"}},
+			},
+			model:    "claude-opus-4-5-20251101",
+			expected: true,
+		},
+		{
+			name: "Anthropic平台-前缀匹配-mapping中为完整版本号key",
+			account: &Account{
+				Platform:    PlatformAnthropic,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5-20251101": "claude-opus-4-5-20251101"}},
+			},
+			model:    "claude-opus-4-5-20251101",
+			expected: true,
+		},
+		{
+			name: "Anthropic平台-前缀匹配-请求非归一化模型但mapping中有前缀",
+			account: &Account{
+				Platform:    PlatformAnthropic,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-haiku-4-5": "claude-haiku-4-5-20251001"}},
+			},
+			model:    "claude-haiku-4-5-20251001",
+			expected: true,
+		},
+		{
+			name: "Anthropic平台-前缀匹配-请求模型不在任何配置中",
+			account: &Account{
+				Platform:    PlatformAnthropic,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5": "x"}},
+			},
+			model:    "claude-sonnet-4-5-20250929",
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
