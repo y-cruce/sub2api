@@ -2,6 +2,13 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'fix/**'
+    # 排除 tag 推送，避免与 Release 工作流重复触发
+    tags-ignore:
+      - 'v*'
   pull_request:
 
 permissions:
