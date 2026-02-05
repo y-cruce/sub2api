@@ -1055,37 +1055,53 @@ func TestGatewayService_isModelSupportedByAccount(t *testing.T) {
 			model:    "claude-3-5-sonnet-20241022",
 			expected: true,
 		},
+		// APIKey 账号：直接透传，不做模型名转换
 		{
-			name: "Anthropic平台-前缀匹配-mapping中为前缀key",
+			name: "Anthropic平台-APIKey账号-精确匹配",
 			account: &Account{
 				Platform:    PlatformAnthropic,
-				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5": "claude-opus-4-5-20251101"}},
-			},
-			model:    "claude-opus-4-5-20251101",
-			expected: true,
-		},
-		{
-			name: "Anthropic平台-前缀匹配-mapping中为完整版本号key",
-			account: &Account{
-				Platform:    PlatformAnthropic,
+				Type:        AccountTypeAPIKey,
 				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5-20251101": "claude-opus-4-5-20251101"}},
 			},
 			model:    "claude-opus-4-5-20251101",
 			expected: true,
 		},
 		{
-			name: "Anthropic平台-前缀匹配-请求非归一化模型但mapping中有前缀",
+			name: "Anthropic平台-APIKey账号-前缀key不匹配完整模型名",
 			account: &Account{
 				Platform:    PlatformAnthropic,
-				Credentials: map[string]any{"model_mapping": map[string]any{"claude-haiku-4-5": "claude-haiku-4-5-20251001"}},
+				Type:        AccountTypeAPIKey,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5": "claude-opus-4-5-20251101"}},
 			},
-			model:    "claude-haiku-4-5-20251001",
+			model:    "claude-opus-4-5-20251101",
+			expected: false, // APIKey 不做前缀匹配，直接透传
+		},
+		// OAuth 账号：使用 NormalizeModelID (短ID→长ID)
+		{
+			name: "Anthropic平台-OAuth账号-短ID映射为长ID后匹配",
+			account: &Account{
+				Platform:    PlatformAnthropic,
+				Type:        AccountTypeOAuth,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5-20251101": "claude-opus-4-5-20251101"}},
+			},
+			model:    "claude-opus-4-5", // 短ID会被映射为长ID
 			expected: true,
 		},
 		{
-			name: "Anthropic平台-前缀匹配-请求模型不在任何配置中",
+			name: "Anthropic平台-OAuth账号-长ID直接匹配",
 			account: &Account{
 				Platform:    PlatformAnthropic,
+				Type:        AccountTypeOAuth,
+				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5-20251101": "claude-opus-4-5-20251101"}},
+			},
+			model:    "claude-opus-4-5-20251101",
+			expected: true,
+		},
+		{
+			name: "Anthropic平台-请求模型不在任何配置中",
+			account: &Account{
+				Platform:    PlatformAnthropic,
+				Type:        AccountTypeAPIKey,
 				Credentials: map[string]any{"model_mapping": map[string]any{"claude-opus-4-5": "x"}},
 			},
 			model:    "claude-sonnet-4-5-20250929",
