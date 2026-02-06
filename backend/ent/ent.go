@@ -17,6 +17,7 @@ import (
 	"github.com/y-cruce/sub2api/ent/announcement"
 	"github.com/y-cruce/sub2api/ent/announcementread"
 	"github.com/y-cruce/sub2api/ent/apikey"
+	"github.com/y-cruce/sub2api/ent/errorpassthroughrule"
 	"github.com/y-cruce/sub2api/ent/group"
 	"github.com/y-cruce/sub2api/ent/promocode"
 	"github.com/y-cruce/sub2api/ent/promocodeusage"
@@ -95,6 +96,7 @@ func checkColumn(t, c string) error {
 			accountgroup.Table:            accountgroup.ValidColumn,
 			announcement.Table:            announcement.ValidColumn,
 			announcementread.Table:        announcementread.ValidColumn,
+			errorpassthroughrule.Table:    errorpassthroughrule.ValidColumn,
 			group.Table:                   group.ValidColumn,
 			promocode.Table:               promocode.ValidColumn,
 			promocodeusage.Table:          promocodeusage.ValidColumn,
