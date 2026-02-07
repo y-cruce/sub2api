@@ -304,6 +304,7 @@ func logPrefix(sessionID, accountName string) string {
 // Antigravity 直接支持的模型（精确匹配透传）
 // 注意：gemini-2.5 系列已移除，统一映射到 gemini-3 系列
 var antigravitySupportedModels = map[string]bool{
+	"claude-opus-4-6-thinking":   true,
 	"claude-opus-4-5-thinking":   true,
 	"claude-sonnet-4-5":          true,
 	"claude-sonnet-4-5-thinking": true,
@@ -337,6 +338,7 @@ var antigravityPrefixMapping = []struct {
 	{"claude-sonnet-4-5", "claude-sonnet-4-5"}, // claude-sonnet-4-5-xxx
 	{"claude-haiku-4-5", "claude-sonnet-4-5"},  // claude-haiku-4-5-xxx → sonnet
 	{"claude-opus-4-5", "claude-opus-4-5-thinking"},
+	{"claude-opus-4-6", "claude-opus-4-6-thinking"},
 	{"claude-3-haiku", "claude-sonnet-4-5"}, // 旧版 claude-3-haiku-xxx → sonnet
 	{"claude-sonnet-4", "claude-sonnet-4-5"},
 	{"claude-haiku-4", "claude-sonnet-4-5"}, // → sonnet
@@ -2046,11 +2048,12 @@ func (s *AntigravityGatewayService) handleUpstreamError(ctx context.Context, pre
 		resetAt := ParseGeminiRateLimitResetTime(body)
 		if resetAt == nil {
 			// 解析失败：使用配置的 fallback 时间，直接限流整个账户
-			fallbackMinutes := 5
+			// 默认 30 秒，可通过配置覆盖（配置单位为分钟）
+			fallbackSeconds := 30
 			if s.settingService != nil && s.settingService.cfg != nil && s.settingService.cfg.Gateway.AntigravityFallbackCooldownMinutes > 0 {
-				fallbackMinutes = s.settingService.cfg.Gateway.AntigravityFallbackCooldownMinutes
+				fallbackSeconds = s.settingService.cfg.Gateway.AntigravityFallbackCooldownMinutes * 60
 			}
-			defaultDur := time.Duration(fallbackMinutes) * time.Minute
+			defaultDur := time.Duration(fallbackSeconds) * time.Second
 			if fallbackDur, ok := antigravityFallbackCooldownSeconds(); ok {
 				defaultDur = fallbackDur
 			}
