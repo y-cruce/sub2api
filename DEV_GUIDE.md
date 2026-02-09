@@ -33,7 +33,7 @@
 
 ### 开发工具
 
-```bash
+```bash和平上游
 # golangci-lint v2.7
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7
 
