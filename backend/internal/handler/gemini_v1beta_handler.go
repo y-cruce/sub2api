@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/y-cruce/sub2api/internal/domain"
 	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
@@ -22,7 +23,6 @@ import (
 	"github.com/y-cruce/sub2api/internal/pkg/ip"
 	"github.com/y-cruce/sub2api/internal/server/middleware"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
 )

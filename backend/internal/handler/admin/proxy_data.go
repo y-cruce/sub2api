@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/y-cruce/sub2api/internal/pkg/response"
 	"github.com/y-cruce/sub2api/internal/service"
-	"github.com/gin-gonic/gin"
 )
 
 // ExportData exports proxy-only data for migration.

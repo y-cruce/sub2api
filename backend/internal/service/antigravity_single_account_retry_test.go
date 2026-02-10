@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
 )
 
 // ---------------------------------------------------------------------------

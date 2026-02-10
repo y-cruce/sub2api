@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
-	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------

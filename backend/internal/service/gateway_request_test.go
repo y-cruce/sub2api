@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/y-cruce/sub2api/internal/domain"
 	"github.com/stretchr/testify/require"
+	"github.com/y-cruce/sub2api/internal/domain"
 )
 
 func TestParseGatewayRequest(t *testing.T) {
