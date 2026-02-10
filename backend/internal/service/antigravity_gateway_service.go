@@ -765,6 +765,31 @@ func (s *AntigravityGatewayService) getLogConfig() (logBody bool, maxBytes int) 
 	return cfg.LogUpstreamErrorBody, maxBytes
 }
 
+// shouldOverrideThinking 判断是否需要对指定模型自动覆盖 thinking 参数
+func (s *AntigravityGatewayService) shouldOverrideThinking(mappedModel string) bool {
+	if s.settingService == nil || s.settingService.cfg == nil {
+		return false
+	}
+	cfg := s.settingService.cfg.Gateway
+	if !cfg.AntigravityThinkingOverride {
+		return false
+	}
+	for _, m := range cfg.AntigravityThinkingOverrideModels {
+		if m == mappedModel {
+			return true
+		}
+	}
+	return false
+}
+
+// getThinkingOverrideBudget 获取配置的 thinking budget 值
+func (s *AntigravityGatewayService) getThinkingOverrideBudget() int {
+	if s.settingService == nil || s.settingService.cfg == nil {
+		return 31999
+	}
+	return s.settingService.cfg.Gateway.AntigravityThinkingBudget
+}
+
 // getUpstreamErrorDetail 获取上游错误详情（用于日志记录）
 func (s *AntigravityGatewayService) getUpstreamErrorDetail(body []byte) string {
 	logBody, maxBytes := s.getLogConfig()
@@ -1222,6 +1247,17 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 	// 应用 thinking 模式自动后缀：如果 thinking 开启且目标是 claude-sonnet-4-5，自动改为 thinking 版本
 	thinkingEnabled := claudeReq.Thinking != nil && claudeReq.Thinking.Type == "enabled"
 	mappedModel = applyThinkingModelSuffix(mappedModel, thinkingEnabled)
+
+	// 自动注入 thinking 参数：对配置列表中的模型强制覆盖 thinking 配置
+	if s.shouldOverrideThinking(mappedModel) {
+		budget := s.getThinkingOverrideBudget()
+		if budget > 0 {
+			claudeReq.Thinking = &antigravity.ThinkingConfig{
+				Type:         "enabled",
+				BudgetTokens: budget,
+			}
+		}
+	}
 
 	// 获取 access_token
 	if s.tokenProvider == nil {

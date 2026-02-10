@@ -201,6 +201,16 @@ gateway:
   # Retry delay in seconds when upstream returns error (default: 5)
   # 上游返回错误时的重试间隔（秒），默认 5 秒
   retry_delay_seconds: 5
+  # Antigravity: Enable thinking parameter override for specified models
+  # Antigravity: 是否启用指定模型的思考参数自动覆盖
+  antigravity_thinking_override: true
+  # Antigravity: Models that should have thinking parameters auto-overridden
+  # Antigravity: 需要自动覆盖思考参数的模型列表
+  antigravity_thinking_override_models:
+    - "claude-opus-4-6-thinking"
+  # Antigravity: Thinking budget for overridden models (only when override=true and model matches)
+  # Antigravity: 覆盖时使用的思考预算（仅在 override=true 且模型匹配时生效）
+  antigravity_thinking_budget: 31999
   # Scheduling configuration
   # 调度配置
   scheduling:
