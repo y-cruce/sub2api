@@ -282,15 +282,6 @@ type GatewayConfig struct {
 	// Antigravity 429 fallback 限流时间（分钟），解析重置时间失败时使用
 	AntigravityFallbackCooldownMinutes int `mapstructure:"antigravity_fallback_cooldown_minutes"`
 
-	// AntigravityThinkingOverride: 是否启用指定模型的 thinking 参数自动覆盖
-	AntigravityThinkingOverride bool `mapstructure:"antigravity_thinking_override"`
-	// AntigravityThinkingOverrideModels: 需要自动覆盖 thinking 参数的模型列表
-	// mappedModel 命中列表中任一模型时，强制设置 thinking.type=enabled 和配置的 budget 值
-	AntigravityThinkingOverrideModels []string `mapstructure:"antigravity_thinking_override_models"`
-	// AntigravityThinkingBudget: 自动覆盖时使用的 thinking budget 值
-	// 仅在 AntigravityThinkingOverride=true 且模型命中列表时生效
-	AntigravityThinkingBudget int `mapstructure:"antigravity_thinking_budget"`
-
 	// Scheduling: 账号调度相关配置
 	Scheduling GatewaySchedulingConfig `mapstructure:"scheduling"`
 
@@ -896,9 +887,6 @@ func setDefaults() {
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
 	viper.SetDefault("gateway.retry_delay_seconds", 5)
 	viper.SetDefault("gateway.antigravity_fallback_cooldown_minutes", 1)
-	viper.SetDefault("gateway.antigravity_thinking_override", true)
-	viper.SetDefault("gateway.antigravity_thinking_override_models", []string{"claude-opus-4-6-thinking"})
-	viper.SetDefault("gateway.antigravity_thinking_budget", 31999)
 	viper.SetDefault("gateway.max_body_size", int64(100*1024*1024))
 	viper.SetDefault("gateway.connection_pool_isolation", ConnectionPoolIsolationAccountProxy)
 	// HTTP 上游连接池配置（针对 5000+ 并发用户优化）

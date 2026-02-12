@@ -614,8 +614,6 @@ func buildGenerationConfig(req *ClaudeRequest) *GeminiGenerationConfig {
 
 	// Thinking 配置
 	if req.Thinking != nil && (req.Thinking.Type == "enabled" || req.Thinking.Type == "adaptive") {
-		log.Printf("[Antigravity] Thinking enabled, budget_tokens=%d, model=%s, max_tokens=%d",
-			req.Thinking.BudgetTokens, req.Model, req.MaxTokens)
 		config.ThinkingConfig = &GeminiThinkingConfig{
 			IncludeThoughts: true,
 		}
