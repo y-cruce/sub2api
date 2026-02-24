@@ -7,27 +7,28 @@ import (
 	"fmt"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/y-cruce/sub2api/ent"
-	"github.com/y-cruce/sub2api/ent/account"
-	"github.com/y-cruce/sub2api/ent/accountgroup"
-	"github.com/y-cruce/sub2api/ent/announcement"
-	"github.com/y-cruce/sub2api/ent/announcementread"
-	"github.com/y-cruce/sub2api/ent/apikey"
-	"github.com/y-cruce/sub2api/ent/errorpassthroughrule"
-	"github.com/y-cruce/sub2api/ent/group"
-	"github.com/y-cruce/sub2api/ent/predicate"
-	"github.com/y-cruce/sub2api/ent/promocode"
-	"github.com/y-cruce/sub2api/ent/promocodeusage"
-	"github.com/y-cruce/sub2api/ent/proxy"
-	"github.com/y-cruce/sub2api/ent/redeemcode"
-	"github.com/y-cruce/sub2api/ent/setting"
-	"github.com/y-cruce/sub2api/ent/usagecleanuptask"
-	"github.com/y-cruce/sub2api/ent/usagelog"
-	"github.com/y-cruce/sub2api/ent/user"
-	"github.com/y-cruce/sub2api/ent/userallowedgroup"
-	"github.com/y-cruce/sub2api/ent/userattributedefinition"
-	"github.com/y-cruce/sub2api/ent/userattributevalue"
-	"github.com/y-cruce/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementread"
+	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
+	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/predicate"
+	"github.com/Wei-Shaw/sub2api/ent/promocode"
+	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
+	"github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
+	"github.com/Wei-Shaw/sub2api/ent/setting"
+	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
+	"github.com/Wei-Shaw/sub2api/ent/usagelog"
+	"github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
+	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
+	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 )
 
 // The Query interface represents an operation that queries a graph.
@@ -383,6 +384,33 @@ func (f TraverseRedeemCode) Traverse(ctx context.Context, q ent.Query) error {
 	return fmt.Errorf("unexpected query type %T. expect *ent.RedeemCodeQuery", q)
 }
 
+// The SecuritySecretFunc type is an adapter to allow the use of ordinary function as a Querier.
+type SecuritySecretFunc func(context.Context, *ent.SecuritySecretQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f SecuritySecretFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.SecuritySecretQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.SecuritySecretQuery", q)
+}
+
+// The TraverseSecuritySecret type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseSecuritySecret func(context.Context, *ent.SecuritySecretQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseSecuritySecret) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseSecuritySecret) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.SecuritySecretQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.SecuritySecretQuery", q)
+}
+
 // The SettingFunc type is an adapter to allow the use of ordinary function as a Querier.
 type SettingFunc func(context.Context, *ent.SettingQuery) (ent.Value, error)
 
@@ -624,6 +652,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.ProxyQuery, predicate.Proxy, proxy.OrderOption]{typ: ent.TypeProxy, tq: q}, nil
 	case *ent.RedeemCodeQuery:
 		return &query[*ent.RedeemCodeQuery, predicate.RedeemCode, redeemcode.OrderOption]{typ: ent.TypeRedeemCode, tq: q}, nil
+	case *ent.SecuritySecretQuery:
+		return &query[*ent.SecuritySecretQuery, predicate.SecuritySecret, securitysecret.OrderOption]{typ: ent.TypeSecuritySecret, tq: q}, nil
 	case *ent.SettingQuery:
 		return &query[*ent.SettingQuery, predicate.Setting, setting.OrderOption]{typ: ent.TypeSetting, tq: q}, nil
 	case *ent.UsageCleanupTaskQuery:

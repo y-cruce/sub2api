@@ -15,6 +15,12 @@ import (
 	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 )
 
+// 编译期接口断言
+var _ HTTPUpstream = (*stubAntigravityUpstream)(nil)
+var _ HTTPUpstream = (*recordingOKUpstream)(nil)
+var _ AccountRepository = (*stubAntigravityAccountRepo)(nil)
+var _ SchedulerCache = (*stubSchedulerCache)(nil)
+
 type stubAntigravityUpstream struct {
 	firstBase  string
 	secondBase string
