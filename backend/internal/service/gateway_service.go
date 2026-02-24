@@ -20,13 +20,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
-	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+	"github.com/y-cruce/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/pkg/claude"
+	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/pkg/usagestats"
+	"github.com/y-cruce/sub2api/internal/util/responseheaders"
+	"github.com/y-cruce/sub2api/internal/util/urlvalidator"
 	"github.com/cespare/xxhash/v2"
 	"github.com/google/uuid"
 	gocache "github.com/patrickmn/go-cache"
@@ -3500,7 +3500,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					//    also downgrade tool_use/tool_result blocks to text.
 
 					filteredBody := FilterThinkingBlocksForRetry(body)
-					retryReq, buildErr := s.buildUpstreamRequest(ctx, upstreamCtx, c, account, filteredBody, token, tokenType, reqModel, reqStream, shouldMimicClaudeCode)
+					retryReq, buildErr := s.buildUpstreamRequest(ctx, c, account, filteredBody, token, tokenType, reqModel, reqStream, shouldMimicClaudeCode)
 					if buildErr == nil {
 						retryResp, retryErr := s.httpUpstream.DoWithTLS(retryReq, proxyURL, account.ID, account.Concurrency, account.IsTLSFingerprintEnabled())
 						if retryErr == nil {
@@ -3532,7 +3532,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 								if looksLikeToolSignatureError(msg2) && time.Since(retryStart) < maxRetryElapsed {
 									logger.LegacyPrintf("service.gateway", "Account %d: signature retry still failing and looks tool-related, retrying with tool blocks downgraded", account.ID)
 									filteredBody2 := FilterSignatureSensitiveBlocksForRetry(body)
-									retryReq2, buildErr2 := s.buildUpstreamRequest(ctx, upstreamCtx, c, account, filteredBody2, token, tokenType, reqModel, reqStream, shouldMimicClaudeCode)
+									retryReq2, buildErr2 := s.buildUpstreamRequest(ctx, c, account, filteredBody2, token, tokenType, reqModel, reqStream, shouldMimicClaudeCode)
 									if buildErr2 == nil {
 										retryResp2, retryErr2 := s.httpUpstream.DoWithTLS(retryReq2, proxyURL, account.ID, account.Concurrency, account.IsTLSFingerprintEnabled())
 										if retryErr2 == nil {
@@ -3592,7 +3592,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			effectiveMaxRetry := maxRetryAttempts
 			if shouldUseRule, ruleMaxAttempts, _ := s.shouldRetryWithRule(account, resp.StatusCode, respBody); shouldUseRule && ruleMaxAttempts > 0 {
 				effectiveMaxRetry = ruleMaxAttempts
-				log.Printf("Account %d: using rule retry count %d for status %d", account.ID, ruleMaxAttempts, resp.StatusCode)
+				logger.LegacyPrintf("service.gateway", "Account %d: using rule retry count %d for status %d", account.ID, ruleMaxAttempts, resp.StatusCode)
 			}
 
 			if attempt < effectiveMaxRetry {
@@ -3872,7 +3872,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthrough(
 					break
 				}
 
-				delay := retryBackoffDelay(attempt)
+				delay := s.getRetryDelay()
 				remaining := maxRetryElapsed - elapsed
 				if delay > remaining {
 					delay = remaining
@@ -4436,8 +4436,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	// 使用独立的 httpCtx 创建请求，这样下游断开时不会中断上游读取
-	req, err := http.NewRequestWithContext(httpCtx, "POST", targetURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -5286,8 +5285,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 	for {
 		select {
 		case <-drainTimer:
-			// 客户端断开后超过最大 drain 时间，返回已收集的 usage
-			log.Printf("Drain timeout after client disconnect (max %v), returning collected usage", maxDrainDuration)
+			logger.LegacyPrintf("service.gateway", "Drain timeout after client disconnect (max %v), returning collected usage", maxDrainDuration)
 			return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, nil
 		case ev, ok := <-events:
 			if !ok {

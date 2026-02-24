@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/service"
 )
 
 // soraAccountRepository 实现 service.SoraAccountRepository 接口。

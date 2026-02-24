@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
 )
 
 type runtimeSettingRepoStub struct {

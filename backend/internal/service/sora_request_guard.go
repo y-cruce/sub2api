@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/util/soraerror"
+	"github.com/y-cruce/sub2api/internal/util/soraerror"
 	"github.com/google/uuid"
 )
 

@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+	"github.com/y-cruce/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/pkg/openai"
+	"github.com/y-cruce/sub2api/internal/util/urlvalidator"
 	"go.uber.org/zap"
 )
 

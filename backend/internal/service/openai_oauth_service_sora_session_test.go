@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/y-cruce/sub2api/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 

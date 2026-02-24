@@ -8,10 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/server/middleware"
+	"github.com/y-cruce/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
 

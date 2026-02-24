@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/y-cruce/sub2api/internal/config"

@@ -7,8 +7,8 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/y-cruce/sub2api/internal/domain"
+	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

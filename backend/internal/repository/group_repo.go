@@ -5,18 +5,13 @@ import (
 	"database/sql"
 	"errors"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/apikey"
-	"github.com/Wei-Shaw/sub2api/ent/group"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/lib/pq"
 	dbent "github.com/y-cruce/sub2api/ent"
 	"github.com/y-cruce/sub2api/ent/apikey"
 	"github.com/y-cruce/sub2api/ent/group"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
 	"github.com/y-cruce/sub2api/internal/pkg/pagination"
 	"github.com/y-cruce/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 type sqlExecutor interface {

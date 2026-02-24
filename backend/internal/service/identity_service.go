@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
 )
 
 // 预编译正则表达式（避免每次调用重新编译）

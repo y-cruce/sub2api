@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
 )
 
 // ConcurrencyCache 定义并发控制的缓存接口

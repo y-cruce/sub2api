@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/config"
 )
 
 var ErrUpstreamResponseBodyTooLarge = errors.New("upstream response body too large")

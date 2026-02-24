@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/config"
+	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
 )
 
 // 错误定义
