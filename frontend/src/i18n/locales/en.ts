@@ -1512,7 +1512,8 @@ export default {
         partialSuccess: 'Partially updated: {success} succeeded, {failed} failed',
         failed: 'Bulk update failed',
         noSelection: 'Please select accounts to edit',
-        noFieldsSelected: 'Select at least one field to update'
+        noFieldsSelected: 'Select at least one field to update',
+        mixedPlatformWarning: 'Selected accounts span multiple platforms ({platforms}). Model mapping presets shown are combined — ensure mappings are appropriate for each platform.'
       },
       bulkDeleteTitle: 'Bulk Delete Accounts',
       bulkDeleteConfirm: 'Delete the selected {count} account(s)? This action cannot be undone.',
@@ -2054,7 +2055,7 @@ export default {
         gemini3Pro: 'G3P',
         gemini3Flash: 'G3F',
         gemini3Image: 'G3I',
-        claude45: 'C4.5'
+        claude: 'Claude'
       },
       tier: {
         free: 'Free',

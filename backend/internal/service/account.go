@@ -408,6 +408,13 @@ func (a *Account) GetModelMapping() map[string]string {
 			}
 		}
 		if len(result) > 0 {
+			if a.Platform == domain.PlatformAntigravity {
+				ensureAntigravityDefaultPassthroughs(result, []string{
+					"gemini-3-flash",
+					"gemini-3.1-pro-high",
+					"gemini-3.1-pro-low",
+				})
+			}
 			return result
 		}
 	}
@@ -416,6 +423,27 @@ func (a *Account) GetModelMapping() map[string]string {
 		return domain.DefaultAntigravityModelMapping
 	}
 	return nil
+}
+
+func ensureAntigravityDefaultPassthrough(mapping map[string]string, model string) {
+	if mapping == nil || model == "" {
+		return
+	}
+	if _, exists := mapping[model]; exists {
+		return
+	}
+	for pattern := range mapping {
+		if matchWildcard(pattern, model) {
+			return
+		}
+	}
+	mapping[model] = model
+}
+
+func ensureAntigravityDefaultPassthroughs(mapping map[string]string, models []string) {
+	for _, model := range models {
+		ensureAntigravityDefaultPassthrough(mapping, model)
+	}
 }
 
 // IsModelSupported 检查模型是否在 model_mapping 中（支持通配符）
