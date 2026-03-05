@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/util/soraerror"
+	dbent "github.com/y-cruce/sub2api/ent"
+	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
+	"github.com/y-cruce/sub2api/internal/pkg/httpclient"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/pkg/pagination"
+	"github.com/y-cruce/sub2api/internal/util/soraerror"
 )
 
 // AdminService interface defines admin management operations

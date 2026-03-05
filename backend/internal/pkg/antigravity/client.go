@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
+	"github.com/y-cruce/sub2api/internal/pkg/proxyurl"
+	"github.com/y-cruce/sub2api/internal/pkg/proxyutil"
 )
 
 // NewAPIRequestWithURL 使用指定的 base URL 创建 Antigravity API 请求（v1internal 端点）

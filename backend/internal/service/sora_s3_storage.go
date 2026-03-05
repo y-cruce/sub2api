@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
 )
 
 // SoraS3Storage 负责 Sora 媒体文件的 S3 存储操作。

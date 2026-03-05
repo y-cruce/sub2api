@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/service"
 )
 
 // soraGenerationRepository 实现 service.SoraGenerationRepository 接口。

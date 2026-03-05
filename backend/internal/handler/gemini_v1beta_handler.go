@@ -11,19 +11,18 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
-	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/y-cruce/sub2api/internal/domain"
+	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
+	"github.com/y-cruce/sub2api/internal/pkg/gemini"
+	"github.com/y-cruce/sub2api/internal/pkg/googleapi"
+	pkghttputil "github.com/y-cruce/sub2api/internal/pkg/httputil"
+	"github.com/y-cruce/sub2api/internal/pkg/ip"
+	"github.com/y-cruce/sub2api/internal/pkg/logger"
+	"github.com/y-cruce/sub2api/internal/server/middleware"
+	"github.com/y-cruce/sub2api/internal/service"
 	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 

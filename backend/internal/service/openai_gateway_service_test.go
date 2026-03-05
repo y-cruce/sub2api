@@ -13,11 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/y-cruce/sub2api/internal/config"
 	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"github.com/y-cruce/sub2api/internal/config"
 )
 
 // 编译期接口断言
