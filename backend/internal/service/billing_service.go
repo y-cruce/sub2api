@@ -10,6 +10,16 @@ import (
 	"github.com/y-cruce/sub2api/internal/config"
 )
 
+// APIKeyRateLimitCacheData holds rate limit usage data cached in Redis.
+type APIKeyRateLimitCacheData struct {
+	Usage5h  float64 `json:"usage_5h"`
+	Usage1d  float64 `json:"usage_1d"`
+	Usage7d  float64 `json:"usage_7d"`
+	Window5h int64   `json:"window_5h"` // unix timestamp, 0 = not started
+	Window1d int64   `json:"window_1d"`
+	Window7d int64   `json:"window_7d"`
+}
+
 // BillingCache defines cache operations for billing service
 type BillingCache interface {
 	// Balance operations
@@ -23,6 +33,12 @@ type BillingCache interface {
 	SetSubscriptionCache(ctx context.Context, userID, groupID int64, data *SubscriptionCacheData) error
 	UpdateSubscriptionUsage(ctx context.Context, userID, groupID int64, cost float64) error
 	InvalidateSubscriptionCache(ctx context.Context, userID, groupID int64) error
+
+	// API Key rate limit operations
+	GetAPIKeyRateLimit(ctx context.Context, keyID int64) (*APIKeyRateLimitCacheData, error)
+	SetAPIKeyRateLimit(ctx context.Context, keyID int64, data *APIKeyRateLimitCacheData) error
+	UpdateAPIKeyRateLimitUsage(ctx context.Context, keyID int64, cost float64) error
+	InvalidateAPIKeyRateLimit(ctx context.Context, keyID int64) error
 }
 
 // ModelPricing 模型价格配置（per-token价格，与LiteLLM格式一致）
@@ -543,7 +559,10 @@ func (s *BillingService) getDefaultImagePrice(model string, imageSize string) fl
 		basePrice = 0.134
 	}
 
-	// 4K 尺寸翻倍
+	// 2K 尺寸 1.5 倍，4K 尺寸翻倍
+	if imageSize == "2K" {
+		return basePrice * 1.5
+	}
 	if imageSize == "4K" {
 		return basePrice * 2
 	}

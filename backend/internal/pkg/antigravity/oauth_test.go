@@ -612,14 +612,14 @@ func TestBuildAuthorizationURL_参数验证(t *testing.T) {
 
 	expectedParams := map[string]string{
 		"client_id":              ClientID,
-		"redirect_uri":          RedirectURI,
-		"response_type":         "code",
-		"scope":                 Scopes,
-		"state":                 state,
-		"code_challenge":        codeChallenge,
-		"code_challenge_method": "S256",
-		"access_type":           "offline",
-		"prompt":                "consent",
+		"redirect_uri":           RedirectURI,
+		"response_type":          "code",
+		"scope":                  Scopes,
+		"state":                  state,
+		"code_challenge":         codeChallenge,
+		"code_challenge_method":  "S256",
+		"access_type":            "offline",
+		"prompt":                 "consent",
 		"include_granted_scopes": "true",
 	}
 
@@ -690,7 +690,7 @@ func TestConstants_值正确(t *testing.T) {
 	if RedirectURI != "http://localhost:8085/callback" {
 		t.Errorf("RedirectURI 不匹配: got %s", RedirectURI)
 	}
-	if GetUserAgent() != "antigravity/1.18.4 windows/amd64" {
+	if GetUserAgent() != "antigravity/1.19.6 windows/amd64" {
 		t.Errorf("UserAgent 不匹配: got %s", GetUserAgent())
 	}
 	if SessionTTL != 30*time.Minute {

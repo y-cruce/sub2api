@@ -22,6 +22,10 @@ type UserListFilters struct {
 	Role       string           // User role filter
 	Search     string           // Search in email, username
 	Attributes map[int64]string // Custom attribute filters: attributeID -> value
+	// IncludeSubscriptions controls whether ListWithFilters should load active subscriptions.
+	// For large datasets this can be expensive; admin list pages should enable it on demand.
+	// nil means not specified (default: load subscriptions for backward compatibility).
+	IncludeSubscriptions *bool
 }
 
 type UserRepository interface {
@@ -40,6 +44,8 @@ type UserRepository interface {
 	UpdateConcurrency(ctx context.Context, id int64, amount int) error
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	RemoveGroupFromAllowedGroups(ctx context.Context, groupID int64) (int64, error)
+	// AddGroupToAllowedGroups 将指定分组增量添加到用户的 allowed_groups（幂等，冲突忽略）
+	AddGroupToAllowedGroups(ctx context.Context, userID int64, groupID int64) error
 
 	// TOTP 双因素认证
 	UpdateTotpSecret(ctx context.Context, userID int64, encryptedSecret *string) error

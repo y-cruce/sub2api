@@ -20,9 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
-	"github.com/y-cruce/sub2api/internal/pkg/ctxkey"
-	"github.com/y-cruce/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -2291,7 +2290,7 @@ func sleepAntigravityBackoffWithContext(ctx context.Context, attempt int) bool {
 
 // isSingleAccountRetry 检查 context 中是否设置了单账号退避重试标记
 func isSingleAccountRetry(ctx context.Context) bool {
-	v, _ := ctx.Value(ctxkey.SingleAccountRetry).(bool)
+	v, _ := SingleAccountRetryFromContext(ctx)
 	return v
 }
 
@@ -3757,14 +3756,17 @@ func (s *AntigravityGatewayService) extractImageSize(body []byte) string {
 }
 
 // isImageGenerationModel 判断模型是否为图片生成模型
-// 支持的模型：gemini-3-pro-image, gemini-3-pro-image-preview, gemini-2.5-flash-image 等
+// 支持的模型：gemini-3.1-flash-image, gemini-3-pro-image, gemini-2.5-flash-image 等
 func isImageGenerationModel(model string) bool {
 	modelLower := strings.ToLower(model)
 	// 移除 models/ 前缀
 	modelLower = strings.TrimPrefix(modelLower, "models/")
 
 	// 精确匹配或前缀匹配
-	return modelLower == "gemini-3-pro-image" ||
+	return modelLower == "gemini-3.1-flash-image" ||
+		modelLower == "gemini-3.1-flash-image-preview" ||
+		strings.HasPrefix(modelLower, "gemini-3.1-flash-image-") ||
+		modelLower == "gemini-3-pro-image" ||
 		modelLower == "gemini-3-pro-image-preview" ||
 		strings.HasPrefix(modelLower, "gemini-3-pro-image-") ||
 		modelLower == "gemini-2.5-flash-image" ||

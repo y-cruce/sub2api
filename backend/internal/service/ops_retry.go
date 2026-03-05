@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
 	"github.com/y-cruce/sub2api/internal/domain"
@@ -480,7 +482,7 @@ func (s *OpsService) executeClientRetry(ctx context.Context, reqType opsRetryReq
 
 		attemptCtx := ctx
 		if switches > 0 {
-			attemptCtx = context.WithValue(attemptCtx, ctxkey.AccountSwitchCount, switches)
+			attemptCtx = WithAccountSwitchCount(attemptCtx, switches, false)
 		}
 		exec := func() *opsRetryExecution {
 			defer selection.ReleaseFunc()
@@ -675,6 +677,7 @@ func newOpsRetryContext(ctx context.Context, errorLog *OpsErrorLogDetail) (*gin.
 	}
 
 	c.Request = req
+	SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
 	return c, w
 }
 
