@@ -182,6 +182,13 @@
                 <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
               <button
+                @click="handleRateMultipliers(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-purple-600 dark:hover:bg-dark-700 dark:hover:text-purple-400"
+              >
+                <Icon name="dollar" size="sm" />
+                <span class="text-xs">{{ t('admin.groups.rateMultipliers') }}</span>
+              </button>
+              <button
                 @click="handleDelete(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
@@ -705,6 +712,44 @@
               :placeholder="t('admin.groups.claudeCode.noFallback')"
             />
             <p class="input-hint">{{ t('admin.groups.claudeCode.fallbackHint') }}</p>
+          </div>
+        </div>
+
+        <!-- OpenAI Messages 调度配置（仅 openai 平台） -->
+        <div v-if="createForm.platform === 'openai'" class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ t('admin.groups.openaiMessages.title') }}</h4>
+
+          <!-- 允许 Messages 调度开关 -->
+          <div class="flex items-center justify-between">
+            <label class="text-sm text-gray-600 dark:text-gray-400">{{ t('admin.groups.openaiMessages.allowDispatch') }}</label>
+            <button
+              type="button"
+              @click="createForm.allow_messages_dispatch = !createForm.allow_messages_dispatch"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              :class="
+                createForm.allow_messages_dispatch ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'
+              "
+            >
+              <span
+                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                :class="
+                  createForm.allow_messages_dispatch ? 'translate-x-6' : 'translate-x-1'
+                "
+              />
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ t('admin.groups.openaiMessages.allowDispatchHint') }}</p>
+
+          <!-- 默认映射模型（仅当开关打开时显示） -->
+          <div v-if="createForm.allow_messages_dispatch" class="mt-3">
+            <label class="input-label">{{ t('admin.groups.openaiMessages.defaultModel') }}</label>
+            <input
+              v-model="createForm.default_mapped_model"
+              type="text"
+              :placeholder="t('admin.groups.openaiMessages.defaultModelPlaceholder')"
+              class="input"
+            />
+            <p class="input-hint">{{ t('admin.groups.openaiMessages.defaultModelHint') }}</p>
           </div>
         </div>
 
@@ -1405,6 +1450,44 @@
           </div>
         </div>
 
+        <!-- OpenAI Messages 调度配置（仅 openai 平台） -->
+        <div v-if="editForm.platform === 'openai'" class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ t('admin.groups.openaiMessages.title') }}</h4>
+
+          <!-- 允许 Messages 调度开关 -->
+          <div class="flex items-center justify-between">
+            <label class="text-sm text-gray-600 dark:text-gray-400">{{ t('admin.groups.openaiMessages.allowDispatch') }}</label>
+            <button
+              type="button"
+              @click="editForm.allow_messages_dispatch = !editForm.allow_messages_dispatch"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              :class="
+                editForm.allow_messages_dispatch ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'
+              "
+            >
+              <span
+                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                :class="
+                  editForm.allow_messages_dispatch ? 'translate-x-6' : 'translate-x-1'
+                "
+              />
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ t('admin.groups.openaiMessages.allowDispatchHint') }}</p>
+
+          <!-- 默认映射模型（仅当开关打开时显示） -->
+          <div v-if="editForm.allow_messages_dispatch" class="mt-3">
+            <label class="input-label">{{ t('admin.groups.openaiMessages.defaultModel') }}</label>
+            <input
+              v-model="editForm.default_mapped_model"
+              type="text"
+              :placeholder="t('admin.groups.openaiMessages.defaultModelPlaceholder')"
+              class="input"
+            />
+            <p class="input-hint">{{ t('admin.groups.openaiMessages.defaultModelHint') }}</p>
+          </div>
+        </div>
+
         <!-- 无效请求兜底（仅 anthropic/antigravity 平台，且非订阅分组） -->
         <div
           v-if="['anthropic', 'antigravity'].includes(editForm.platform) && editForm.subscription_type !== 'subscription'"
@@ -1699,6 +1782,14 @@
         </div>
       </template>
     </BaseDialog>
+
+    <!-- Group Rate Multipliers Modal -->
+    <GroupRateMultipliersModal
+      :show="showRateMultipliersModal"
+      :group="rateMultipliersGroup"
+      @close="showRateMultipliersModal = false"
+      @success="loadGroups"
+    />
   </AppLayout>
 </template>
 
@@ -1720,6 +1811,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
+import GroupRateMultipliersModal from '@/components/admin/group/GroupRateMultipliersModal.vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { useKeyedDebouncedSearch } from '@/composables/useKeyedDebouncedSearch'
@@ -1894,6 +1986,8 @@ const submitting = ref(false)
 const sortSubmitting = ref(false)
 const editingGroup = ref<AdminGroup | null>(null)
 const deletingGroup = ref<AdminGroup | null>(null)
+const showRateMultipliersModal = ref(false)
+const rateMultipliersGroup = ref<AdminGroup | null>(null)
 const sortableGroups = ref<AdminGroup[]>([])
 
 const createForm = reactive({
@@ -1920,6 +2014,9 @@ const createForm = reactive({
   claude_code_only: false,
   fallback_group_id: null as number | null,
   fallback_group_id_on_invalid_request: null as number | null,
+  // OpenAI Messages 调度配置（仅 openai 平台使用）
+  allow_messages_dispatch: false,
+  default_mapped_model: 'gpt-5.4',
   // 模型路由开关
   model_routing_enabled: false,
   // 支持的模型系列（仅 antigravity 平台）
@@ -2161,6 +2258,9 @@ const editForm = reactive({
   claude_code_only: false,
   fallback_group_id: null as number | null,
   fallback_group_id_on_invalid_request: null as number | null,
+  // OpenAI Messages 调度配置（仅 openai 平台使用）
+  allow_messages_dispatch: false,
+  default_mapped_model: '',
   // 模型路由开关
   model_routing_enabled: false,
   // 支持的模型系列（仅 antigravity 平台）
@@ -2260,6 +2360,8 @@ const closeCreateModal = () => {
   createForm.claude_code_only = false
   createForm.fallback_group_id = null
   createForm.fallback_group_id_on_invalid_request = null
+  createForm.allow_messages_dispatch = false
+  createForm.default_mapped_model = 'gpt-5.4'
   createForm.supported_model_scopes = ['claude', 'gemini_text', 'gemini_image']
   createForm.mcp_xml_inject = true
   createForm.copy_accounts_from_group_ids = []
@@ -2320,6 +2422,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.claude_code_only = group.claude_code_only || false
   editForm.fallback_group_id = group.fallback_group_id
   editForm.fallback_group_id_on_invalid_request = group.fallback_group_id_on_invalid_request
+  editForm.allow_messages_dispatch = group.allow_messages_dispatch || false
+  editForm.default_mapped_model = group.default_mapped_model || ''
   editForm.model_routing_enabled = group.model_routing_enabled || false
   editForm.supported_model_scopes = group.supported_model_scopes || ['claude', 'gemini_text', 'gemini_image']
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true
@@ -2373,6 +2477,11 @@ const handleUpdateGroup = async () => {
   }
 }
 
+const handleRateMultipliers = (group: AdminGroup) => {
+  rateMultipliersGroup.value = group
+  showRateMultipliersModal.value = true
+}
+
 const handleDelete = (group: AdminGroup) => {
   deletingGroup.value = group
   showDeleteDialog.value = true
@@ -2409,6 +2518,10 @@ watch(
   (newVal) => {
     if (!['anthropic', 'antigravity'].includes(newVal)) {
       createForm.fallback_group_id_on_invalid_request = null
+    }
+    if (newVal !== 'openai') {
+      createForm.allow_messages_dispatch = false
+      createForm.default_mapped_model = ''
     }
   }
 )

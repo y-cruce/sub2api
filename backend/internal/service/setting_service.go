@@ -1194,6 +1194,113 @@ func (s *SettingService) GetMinClaudeCodeVersion(ctx context.Context) string {
 	return ver
 }
 
+// GetRectifierSettings 获取请求整流器配置
+func (s *SettingService) GetRectifierSettings(ctx context.Context) (*RectifierSettings, error) {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyRectifierSettings)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return DefaultRectifierSettings(), nil
+		}
+		return nil, fmt.Errorf("get rectifier settings: %w", err)
+	}
+	if value == "" {
+		return DefaultRectifierSettings(), nil
+	}
+
+	var settings RectifierSettings
+	if err := json.Unmarshal([]byte(value), &settings); err != nil {
+		return DefaultRectifierSettings(), nil
+	}
+
+	return &settings, nil
+}
+
+// SetRectifierSettings 设置请求整流器配置
+func (s *SettingService) SetRectifierSettings(ctx context.Context, settings *RectifierSettings) error {
+	if settings == nil {
+		return fmt.Errorf("settings cannot be nil")
+	}
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("marshal rectifier settings: %w", err)
+	}
+
+	return s.settingRepo.Set(ctx, SettingKeyRectifierSettings, string(data))
+}
+
+// IsSignatureRectifierEnabled 判断签名整流是否启用（总开关 && 签名子开关）
+func (s *SettingService) IsSignatureRectifierEnabled(ctx context.Context) bool {
+	settings, err := s.GetRectifierSettings(ctx)
+	if err != nil {
+		return true // fail-open: 查询失败时默认启用
+	}
+	return settings.Enabled && settings.ThinkingSignatureEnabled
+}
+
+// IsBudgetRectifierEnabled 判断 Budget 整流是否启用（总开关 && Budget 子开关）
+func (s *SettingService) IsBudgetRectifierEnabled(ctx context.Context) bool {
+	settings, err := s.GetRectifierSettings(ctx)
+	if err != nil {
+		return true // fail-open: 查询失败时默认启用
+	}
+	return settings.Enabled && settings.ThinkingBudgetEnabled
+}
+
+// GetBetaPolicySettings 获取 Beta 策略配置
+func (s *SettingService) GetBetaPolicySettings(ctx context.Context) (*BetaPolicySettings, error) {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyBetaPolicySettings)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return DefaultBetaPolicySettings(), nil
+		}
+		return nil, fmt.Errorf("get beta policy settings: %w", err)
+	}
+	if value == "" {
+		return DefaultBetaPolicySettings(), nil
+	}
+
+	var settings BetaPolicySettings
+	if err := json.Unmarshal([]byte(value), &settings); err != nil {
+		return DefaultBetaPolicySettings(), nil
+	}
+
+	return &settings, nil
+}
+
+// SetBetaPolicySettings 设置 Beta 策略配置
+func (s *SettingService) SetBetaPolicySettings(ctx context.Context, settings *BetaPolicySettings) error {
+	if settings == nil {
+		return fmt.Errorf("settings cannot be nil")
+	}
+
+	validActions := map[string]bool{
+		BetaPolicyActionPass: true, BetaPolicyActionFilter: true, BetaPolicyActionBlock: true,
+	}
+	validScopes := map[string]bool{
+		BetaPolicyScopeAll: true, BetaPolicyScopeOAuth: true, BetaPolicyScopeAPIKey: true,
+	}
+
+	for i, rule := range settings.Rules {
+		if rule.BetaToken == "" {
+			return fmt.Errorf("rule[%d]: beta_token cannot be empty", i)
+		}
+		if !validActions[rule.Action] {
+			return fmt.Errorf("rule[%d]: invalid action %q", i, rule.Action)
+		}
+		if !validScopes[rule.Scope] {
+			return fmt.Errorf("rule[%d]: invalid scope %q", i, rule.Scope)
+		}
+	}
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("marshal beta policy settings: %w", err)
+	}
+
+	return s.settingRepo.Set(ctx, SettingKeyBetaPolicySettings, string(data))
+}
+
 // SetStreamTimeoutSettings 设置流超时处理配置
 func (s *SettingService) SetStreamTimeoutSettings(ctx context.Context, settings *StreamTimeoutSettings) error {
 	if settings == nil {

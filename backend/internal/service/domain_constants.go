@@ -176,6 +176,20 @@ const (
 	SettingKeyStreamTimeoutSettings = "stream_timeout_settings"
 
 	// =========================
+	// Request Rectifier (请求整流器)
+	// =========================
+
+	// SettingKeyRectifierSettings stores JSON config for rectifier settings (thinking signature + budget).
+	SettingKeyRectifierSettings = "rectifier_settings"
+
+	// =========================
+	// Beta Policy Settings
+	// =========================
+
+	// SettingKeyBetaPolicySettings stores JSON config for beta policy rules.
+	SettingKeyBetaPolicySettings = "beta_policy_settings"
+
+	// =========================
 	// Sora S3 存储配置
 	// =========================
 

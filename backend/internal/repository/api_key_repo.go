@@ -165,6 +165,8 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldModelRouting,
 				group.FieldMcpXMLInject,
 				group.FieldSupportedModelScopes,
+				group.FieldAllowMessagesDispatch,
+				group.FieldDefaultMappedModel,
 			)
 		}).
 		Only(ctx)
@@ -450,6 +452,32 @@ func (r *apiKeyRepository) IncrementQuotaUsed(ctx context.Context, id int64, amo
 	return updated.QuotaUsed, nil
 }
 
+// IncrementQuotaUsedAndGetState atomically increments quota_used, conditionally marks the key
+// as quota_exhausted, and returns the latest quota state in one round trip.
+func (r *apiKeyRepository) IncrementQuotaUsedAndGetState(ctx context.Context, id int64, amount float64) (*service.APIKeyQuotaUsageState, error) {
+	query := `
+		UPDATE api_keys
+		SET
+			quota_used = quota_used + $1,
+			status = CASE
+				WHEN quota > 0 AND quota_used + $1 >= quota THEN $2
+				ELSE status
+			END,
+			updated_at = NOW()
+		WHERE id = $3 AND deleted_at IS NULL
+		RETURNING quota_used, quota, key, status
+	`
+
+	state := &service.APIKeyQuotaUsageState{}
+	if err := scanSingleRow(ctx, r.sql, query, []any{amount, service.StatusAPIKeyQuotaExhausted, id}, &state.QuotaUsed, &state.Quota, &state.Key, &state.Status); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, service.ErrAPIKeyNotFound
+		}
+		return nil, err
+	}
+	return state, nil
+}
+
 func (r *apiKeyRepository) UpdateLastUsed(ctx context.Context, id int64, usedAt time.Time) error {
 	affected, err := r.client.APIKey.Update().
 		Where(apikey.IDEQ(id), apikey.DeletedAtIsNil()).
@@ -470,12 +498,12 @@ func (r *apiKeyRepository) UpdateLastUsed(ctx context.Context, id int64, usedAt 
 func (r *apiKeyRepository) IncrementRateLimitUsage(ctx context.Context, id int64, cost float64) error {
 	_, err := r.sql.ExecContext(ctx, `
 		UPDATE api_keys SET
-			usage_5h = usage_5h + $1,
-			usage_1d = usage_1d + $1,
-			usage_7d = usage_7d + $1,
-			window_5h_start = COALESCE(window_5h_start, NOW()),
-			window_1d_start = COALESCE(window_1d_start, NOW()),
-			window_7d_start = COALESCE(window_7d_start, NOW()),
+			usage_5h = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= NOW() THEN $1 ELSE usage_5h + $1 END,
+			usage_1d = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN $1 ELSE usage_1d + $1 END,
+			usage_7d = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN $1 ELSE usage_7d + $1 END,
+			window_5h_start = CASE WHEN window_5h_start IS NULL OR window_5h_start + INTERVAL '5 hours' <= NOW() THEN NOW() ELSE window_5h_start END,
+			window_1d_start = CASE WHEN window_1d_start IS NULL OR window_1d_start + INTERVAL '24 hours' <= NOW() THEN date_trunc('day', NOW()) ELSE window_1d_start END,
+			window_7d_start = CASE WHEN window_7d_start IS NULL OR window_7d_start + INTERVAL '7 days' <= NOW() THEN date_trunc('day', NOW()) ELSE window_7d_start END,
 			updated_at = NOW()
 		WHERE id = $2 AND deleted_at IS NULL`,
 		cost, id)
@@ -489,9 +517,9 @@ func (r *apiKeyRepository) ResetRateLimitWindows(ctx context.Context, id int64) 
 			usage_5h = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= NOW() THEN 0 ELSE usage_5h END,
 			window_5h_start = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= NOW() THEN NOW() ELSE window_5h_start END,
 			usage_1d = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN 0 ELSE usage_1d END,
-			window_1d_start = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN NOW() ELSE window_1d_start END,
+			window_1d_start = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN date_trunc('day', NOW()) ELSE window_1d_start END,
 			usage_7d = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN 0 ELSE usage_7d END,
-			window_7d_start = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN NOW() ELSE window_7d_start END,
+			window_7d_start = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN date_trunc('day', NOW()) ELSE window_7d_start END,
 			updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL`,
 		id)
@@ -619,6 +647,8 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		MCPXMLInject:                    g.McpXMLInject,
 		SupportedModelScopes:            g.SupportedModelScopes,
 		SortOrder:                       g.SortOrder,
+		AllowMessagesDispatch:           g.AllowMessagesDispatch,
+		DefaultMappedModel:              g.DefaultMappedModel,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

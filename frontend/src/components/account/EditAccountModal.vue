@@ -251,6 +251,58 @@
           </template>
         </div>
 
+        <!-- Pool Mode Section -->
+        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+          <div class="mb-3 flex items-center justify-between">
+            <div>
+              <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.accounts.poolModeHint') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="poolModeEnabled = !poolModeEnabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                poolModeEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  poolModeEnabled ? 'translate-x-5' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="poolModeEnabled" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+            <p class="text-xs text-blue-700 dark:text-blue-400">
+              <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
+              {{ t('admin.accounts.poolModeInfo') }}
+            </p>
+          </div>
+          <div v-if="poolModeEnabled" class="mt-3">
+            <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
+            <input
+              v-model.number="poolModeRetryCount"
+              type="number"
+              min="0"
+              :max="MAX_POOL_MODE_RETRY_COUNT"
+              step="1"
+              class="input"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{
+                t('admin.accounts.poolModeRetryCountHint', {
+                  default: DEFAULT_POOL_MODE_RETRY_COUNT,
+                  max: MAX_POOL_MODE_RETRY_COUNT
+                })
+              }}
+            </p>
+          </div>
+        </div>
+
         <!-- Custom Error Codes Section -->
         <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <div class="mb-3 flex items-center justify-between">
@@ -349,6 +401,142 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
+      <div
+        v-if="account.platform === 'openai' && account.type === 'oauth'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
+
+        <div
+          v-if="isOpenAIModelRestrictionDisabled"
+          class="mb-3 rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+        >
+          <p class="text-xs text-amber-700 dark:text-amber-400">
+            {{ t('admin.accounts.openai.modelRestrictionDisabledByPassthrough') }}
+          </p>
+        </div>
+
+        <template v-else>
+          <!-- Mode Toggle -->
+          <div class="mb-4 flex gap-2">
+            <button
+              type="button"
+              @click="modelRestrictionMode = 'whitelist'"
+              :class="[
+                'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                modelRestrictionMode === 'whitelist'
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+              ]"
+            >
+              {{ t('admin.accounts.modelWhitelist') }}
+            </button>
+            <button
+              type="button"
+              @click="modelRestrictionMode = 'mapping'"
+              :class="[
+                'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                modelRestrictionMode === 'mapping'
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+              ]"
+            >
+              {{ t('admin.accounts.modelMapping') }}
+            </button>
+          </div>
+
+          <!-- Whitelist Mode -->
+          <div v-if="modelRestrictionMode === 'whitelist'">
+            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" />
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
+              <span v-if="allowedModels.length === 0">{{
+                t('admin.accounts.supportsAllModels')
+              }}</span>
+            </p>
+          </div>
+
+          <!-- Mapping Mode -->
+          <div v-else>
+            <div class="mb-3 rounded-lg bg-purple-50 p-3 dark:bg-purple-900/20">
+              <p class="text-xs text-purple-700 dark:text-purple-400">
+                {{ t('admin.accounts.mapRequestModels') }}
+              </p>
+            </div>
+
+            <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
+              <div
+                v-for="(mapping, index) in modelMappings"
+                :key="'oauth-' + getModelMappingKey(mapping)"
+                class="flex items-center gap-2"
+              >
+                <input
+                  v-model="mapping.from"
+                  type="text"
+                  class="input flex-1"
+                  :placeholder="t('admin.accounts.requestModel')"
+                />
+                <svg
+                  class="h-4 w-4 flex-shrink-0 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M14 5l7 7m0 0l-7 7m7-7H3"
+                  />
+                </svg>
+                <input
+                  v-model="mapping.to"
+                  type="text"
+                  class="input flex-1"
+                  :placeholder="t('admin.accounts.actualModel')"
+                />
+                <button
+                  type="button"
+                  @click="removeModelMapping(index)"
+                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                >
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              @click="addModelMapping"
+              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+            >
+              + {{ t('admin.accounts.addMapping') }}
+            </button>
+
+            <!-- Quick Add Buttons -->
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="preset in presetMappings"
+                :key="'oauth-' + preset.label"
+                type="button"
+                @click="addPresetMapping(preset.from, preset.to)"
+                :class="['rounded-lg px-3 py-1 text-xs transition-colors', preset.color]"
+              >
+                + {{ preset.label }}
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- Upstream fields (only for upstream type) -->
@@ -813,7 +1001,22 @@
       </div>
 
       <!-- API Key 账号配额限制 -->
-      <QuotaLimitCard v-if="account?.type === 'apikey'" v-model="editQuotaLimit" />
+      <div v-if="account?.type === 'apikey'" class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4">
+        <div class="mb-3">
+          <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaLimit') }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.quotaLimitHint') }}
+          </p>
+        </div>
+        <QuotaLimitCard
+          :totalLimit="editQuotaLimit"
+          :dailyLimit="editQuotaDailyLimit"
+          :weeklyLimit="editQuotaWeeklyLimit"
+          @update:totalLimit="editQuotaLimit = $event"
+          @update:dailyLimit="editQuotaDailyLimit = $event"
+          @update:weeklyLimit="editQuotaWeeklyLimit = $event"
+        />
+      </div>
 
       <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
       <div
@@ -1396,6 +1599,10 @@ const editApiKey = ref('')
 const modelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
+const DEFAULT_POOL_MODE_RETRY_COUNT = 3
+const MAX_POOL_MODE_RETRY_COUNT = 10
+const poolModeEnabled = ref(false)
+const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
 const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
@@ -1448,6 +1655,8 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 const anthropicPassthroughEnabled = ref(false)
 const editQuotaLimit = ref<number | null>(null)
+const editQuotaDailyLimit = ref<number | null>(null)
+const editQuotaWeeklyLimit = ref<number | null>(null)
 const openAIWSModeOptions = computed(() => [
   { value: OPENAI_WS_MODE_OFF, label: t('admin.accounts.openai.wsModeOff') },
   // TODO: ctx_pool 选项暂时隐藏，待测试完成后恢复
@@ -1542,15 +1751,21 @@ const form = reactive({
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
-  status: 'active' as 'active' | 'inactive',
+  status: 'active' as 'active' | 'inactive' | 'error',
   group_ids: [] as number[],
   expires_at: null as number | null
 })
 
-const statusOptions = computed(() => [
-  { value: 'active', label: t('common.active') },
-  { value: 'inactive', label: t('common.inactive') }
-])
+const statusOptions = computed(() => {
+  const options = [
+    { value: 'active', label: t('common.active') },
+    { value: 'inactive', label: t('common.inactive') }
+  ]
+  if (form.status === 'error') {
+    options.push({ value: 'error', label: t('admin.accounts.status.error') })
+  }
+  return options
+})
 
 const expiresAtInput = computed({
   get: () => formatDateTimeLocal(form.expires_at),
@@ -1560,6 +1775,20 @@ const expiresAtInput = computed({
 })
 
 // Watchers
+const normalizePoolModeRetryCount = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_POOL_MODE_RETRY_COUNT
+  }
+  const normalized = Math.trunc(value)
+  if (normalized < 0) {
+    return 0
+  }
+  if (normalized > MAX_POOL_MODE_RETRY_COUNT) {
+    return MAX_POOL_MODE_RETRY_COUNT
+  }
+  return normalized
+}
+
 watch(
   () => props.account,
   (newAccount) => {
@@ -1576,7 +1805,7 @@ watch(
       form.load_factor = newAccount.load_factor ?? null
       form.priority = newAccount.priority
       form.rate_multiplier = newAccount.rate_multiplier ?? 1
-      form.status = (newAccount.status === 'active' || newAccount.status === 'inactive')
+      form.status = (newAccount.status === 'active' || newAccount.status === 'inactive' || newAccount.status === 'error')
         ? newAccount.status
         : 'active'
       form.group_ids = newAccount.group_ids || []
@@ -1623,8 +1852,14 @@ watch(
       if (newAccount.type === 'apikey') {
         const quotaVal = extra?.quota_limit as number | undefined
         editQuotaLimit.value = (quotaVal && quotaVal > 0) ? quotaVal : null
+        const dailyVal = extra?.quota_daily_limit as number | undefined
+        editQuotaDailyLimit.value = (dailyVal && dailyVal > 0) ? dailyVal : null
+        const weeklyVal = extra?.quota_weekly_limit as number | undefined
+        editQuotaWeeklyLimit.value = (weeklyVal && weeklyVal > 0) ? weeklyVal : null
       } else {
         editQuotaLimit.value = null
+        editQuotaDailyLimit.value = null
+        editQuotaWeeklyLimit.value = null
       }
 
       // Load antigravity model mapping (Antigravity 只支持映射模式)
@@ -1701,6 +1936,12 @@ watch(
           allowedModels.value = []
         }
 
+        // Load pool mode
+        poolModeEnabled.value = credentials.pool_mode === true
+        poolModeRetryCount.value = normalizePoolModeRetryCount(
+          Number(credentials.pool_mode_retry_count ?? DEFAULT_POOL_MODE_RETRY_COUNT)
+        )
+
         // Load custom error codes
         customErrorCodesEnabled.value = credentials.custom_error_codes_enabled === true
         const existingErrorCodes = credentials.custom_error_codes as number[] | undefined
@@ -1720,9 +1961,35 @@ watch(
               ? 'https://generativelanguage.googleapis.com'
               : 'https://api.anthropic.com'
         editBaseUrl.value = platformDefaultUrl
-        modelRestrictionMode.value = 'whitelist'
-        modelMappings.value = []
-        allowedModels.value = []
+
+        // Load model mappings for OpenAI OAuth accounts
+        if (newAccount.platform === 'openai' && newAccount.credentials) {
+          const oauthCredentials = newAccount.credentials as Record<string, unknown>
+          const existingMappings = oauthCredentials.model_mapping as Record<string, string> | undefined
+          if (existingMappings && typeof existingMappings === 'object') {
+            const entries = Object.entries(existingMappings)
+            const isWhitelistMode = entries.length > 0 && entries.every(([from, to]) => from === to)
+            if (isWhitelistMode) {
+              modelRestrictionMode.value = 'whitelist'
+              allowedModels.value = entries.map(([from]) => from)
+              modelMappings.value = []
+            } else {
+              modelRestrictionMode.value = 'mapping'
+              modelMappings.value = entries.map(([from, to]) => ({ from, to }))
+              allowedModels.value = []
+            }
+          } else {
+            modelRestrictionMode.value = 'whitelist'
+            modelMappings.value = []
+            allowedModels.value = []
+          }
+        } else {
+          modelRestrictionMode.value = 'whitelist'
+          modelMappings.value = []
+          allowedModels.value = []
+        }
+        poolModeEnabled.value = false
+        poolModeRetryCount.value = DEFAULT_POOL_MODE_RETRY_COUNT
         customErrorCodesEnabled.value = false
         selectedErrorCodes.value = []
       }
@@ -2187,7 +2454,7 @@ const handleSubmit = async () => {
   if (!props.account) return
   const accountID = props.account.id
 
-  if (form.status !== 'active' && form.status !== 'inactive') {
+  if (form.status !== 'active' && form.status !== 'inactive' && form.status !== 'error') {
     appStore.showError(t('admin.accounts.pleaseSelectStatus'))
     return
   }
@@ -2216,6 +2483,7 @@ const handleSubmit = async () => {
 
       // Always update credentials for apikey type to handle model mapping changes
       const newCredentials: Record<string, unknown> = {
+        ...currentCredentials,
         base_url: newBaseUrl
       }
 
@@ -2236,15 +2504,29 @@ const handleSubmit = async () => {
         const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
         if (modelMapping) {
           newCredentials.model_mapping = modelMapping
+        } else {
+          delete newCredentials.model_mapping
         }
       } else if (currentCredentials.model_mapping) {
         newCredentials.model_mapping = currentCredentials.model_mapping
+      }
+
+      // Add pool mode if enabled
+      if (poolModeEnabled.value) {
+        newCredentials.pool_mode = true
+        newCredentials.pool_mode_retry_count = normalizePoolModeRetryCount(poolModeRetryCount.value)
+      } else {
+        delete newCredentials.pool_mode
+        delete newCredentials.pool_mode_retry_count
       }
 
       // Add custom error codes if enabled
       if (customErrorCodesEnabled.value) {
         newCredentials.custom_error_codes_enabled = true
         newCredentials.custom_error_codes = [...selectedErrorCodes.value]
+      } else {
+        delete newCredentials.custom_error_codes_enabled
+        delete newCredentials.custom_error_codes
       }
 
       // Add intercept warmup requests setting
@@ -2280,6 +2562,28 @@ const handleSubmit = async () => {
       applyInterceptWarmup(newCredentials, interceptWarmupRequests.value, 'edit')
       if (!applyTempUnschedConfig(newCredentials)) {
         return
+      }
+
+      updatePayload.credentials = newCredentials
+    }
+
+    // OpenAI OAuth: persist model mapping to credentials
+    if (props.account.platform === 'openai' && props.account.type === 'oauth') {
+      const currentCredentials = (updatePayload.credentials as Record<string, unknown>) ||
+        ((props.account.credentials as Record<string, unknown>) || {})
+      const newCredentials: Record<string, unknown> = { ...currentCredentials }
+      const shouldApplyModelMapping = !openaiPassthroughEnabled.value
+
+      if (shouldApplyModelMapping) {
+        const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+        if (modelMapping) {
+          newCredentials.model_mapping = modelMapping
+        } else {
+          delete newCredentials.model_mapping
+        }
+      } else if (currentCredentials.model_mapping) {
+        // 透传模式保留现有映射
+        newCredentials.model_mapping = currentCredentials.model_mapping
       }
 
       updatePayload.credentials = newCredentials
@@ -2452,6 +2756,16 @@ const handleSubmit = async () => {
         newExtra.quota_limit = editQuotaLimit.value
       } else {
         delete newExtra.quota_limit
+      }
+      if (editQuotaDailyLimit.value != null && editQuotaDailyLimit.value > 0) {
+        newExtra.quota_daily_limit = editQuotaDailyLimit.value
+      } else {
+        delete newExtra.quota_daily_limit
+      }
+      if (editQuotaWeeklyLimit.value != null && editQuotaWeeklyLimit.value > 0) {
+        newExtra.quota_weekly_limit = editQuotaWeeklyLimit.value
+      } else {
+        delete newExtra.quota_weekly_limit
       }
       updatePayload.extra = newExtra
     }

@@ -155,6 +155,7 @@ export interface UpdateSubscriptionRequest {
 // ==================== Announcement Types ====================
 
 export type AnnouncementStatus = 'draft' | 'active' | 'archived'
+export type AnnouncementNotifyMode = 'silent' | 'popup'
 
 export type AnnouncementConditionType = 'subscription' | 'balance'
 
@@ -180,6 +181,7 @@ export interface Announcement {
   title: string
   content: string
   status: AnnouncementStatus
+  notify_mode: AnnouncementNotifyMode
   targeting: AnnouncementTargeting
   starts_at?: string
   ends_at?: string
@@ -193,6 +195,7 @@ export interface UserAnnouncement {
   id: number
   title: string
   content: string
+  notify_mode: AnnouncementNotifyMode
   starts_at?: string
   ends_at?: string
   read_at?: string
@@ -204,6 +207,7 @@ export interface CreateAnnouncementRequest {
   title: string
   content: string
   status?: AnnouncementStatus
+  notify_mode?: AnnouncementNotifyMode
   targeting: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
@@ -213,6 +217,7 @@ export interface UpdateAnnouncementRequest {
   title?: string
   content?: string
   status?: AnnouncementStatus
+  notify_mode?: AnnouncementNotifyMode
   targeting?: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
@@ -384,6 +389,8 @@ export interface Group {
   claude_code_only: boolean
   fallback_group_id: number | null
   fallback_group_id_on_invalid_request: number | null
+  // OpenAI Messages 调度开关（用户侧需要此字段判断是否展示 Claude Code 教程）
+  allow_messages_dispatch?: boolean
   created_at: string
   updated_at: string
 }
@@ -401,6 +408,9 @@ export interface AdminGroup extends Group {
 
   // 分组下账号数量（仅管理员可见）
   account_count?: number
+
+  // OpenAI Messages 调度配置（仅 openai 平台使用）
+  default_mapped_model?: string
 
   // 分组排序
   sort_order: number
@@ -431,6 +441,9 @@ export interface ApiKey {
   window_5h_start: string | null
   window_1d_start: string | null
   window_7d_start: string | null
+  reset_5h_at: string | null
+  reset_1d_at: string | null
+  reset_7d_at: string | null
 }
 
 export interface CreateApiKeyRequest {
@@ -712,6 +725,10 @@ export interface Account {
   // API Key 账号配额限制
   quota_limit?: number | null
   quota_used?: number | null
+  quota_daily_limit?: number | null
+  quota_daily_used?: number | null
+  quota_weekly_limit?: number | null
+  quota_weekly_used?: number | null
 
   // 运行时状态（仅当启用对应限制时返回）
   current_window_cost?: number | null // 当前窗口费用
@@ -812,7 +829,7 @@ export interface UpdateAccountRequest {
   priority?: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   schedulable?: boolean
-  status?: 'active' | 'inactive'
+  status?: 'active' | 'inactive' | 'error'
   group_ids?: number[]
   expires_at?: number | null
   auto_pause_on_expired?: boolean
@@ -920,6 +937,7 @@ export interface UsageLog {
   account_id: number | null
   request_id: string
   model: string
+  service_tier?: string | null
   reasoning_effort?: string | null
 
   group_id: number | null
@@ -1480,6 +1498,7 @@ export interface ScheduledTestPlan {
   cron_expression: string
   enabled: boolean
   max_results: number
+  auto_recover: boolean
   last_run_at: string | null
   next_run_at: string | null
   created_at: string
@@ -1504,6 +1523,7 @@ export interface CreateScheduledTestPlanRequest {
   cron_expression: string
   enabled?: boolean
   max_results?: number
+  auto_recover?: boolean
 }
 
 export interface UpdateScheduledTestPlanRequest {
@@ -1511,4 +1531,5 @@ export interface UpdateScheduledTestPlanRequest {
   cron_expression?: string
   enabled?: boolean
   max_results?: number
+  auto_recover?: boolean
 }

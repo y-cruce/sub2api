@@ -43,22 +43,36 @@ func RegisterGatewayRoutes(
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
 	gateway.Use(requireGroupAnthropic)
 	{
-		gateway.POST("/messages", h.Gateway.Messages)
-		gateway.POST("/messages/count_tokens", h.Gateway.CountTokens)
+		// /v1/messages: auto-route based on group platform
+		gateway.POST("/messages", func(c *gin.Context) {
+			if getGroupPlatform(c) == service.PlatformOpenAI {
+				h.OpenAIGateway.Messages(c)
+				return
+			}
+			h.Gateway.Messages(c)
+		})
+		// /v1/messages/count_tokens: OpenAI groups get 404
+		gateway.POST("/messages/count_tokens", func(c *gin.Context) {
+			if getGroupPlatform(c) == service.PlatformOpenAI {
+				c.JSON(http.StatusNotFound, gin.H{
+					"type": "error",
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Token counting is not supported for this platform",
+					},
+				})
+				return
+			}
+			h.Gateway.CountTokens(c)
+		})
 		gateway.GET("/models", h.Gateway.Models)
 		gateway.GET("/usage", h.Gateway.Usage)
 		// OpenAI Responses API
 		gateway.POST("/responses", h.OpenAIGateway.Responses)
+		gateway.POST("/responses/*subpath", h.OpenAIGateway.Responses)
 		gateway.GET("/responses", h.OpenAIGateway.ResponsesWebSocket)
-		// 明确阻止旧协议入口：OpenAI 仅支持 Responses API，避免客户端误解为会自动路由到其它平台。
-		gateway.POST("/chat/completions", func(c *gin.Context) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": gin.H{
-					"type":    "invalid_request_error",
-					"message": "Unsupported legacy protocol: /v1/chat/completions is not supported. Please use /v1/responses.",
-				},
-			})
-		})
+		// OpenAI Chat Completions API
+		gateway.POST("/chat/completions", h.OpenAIGateway.ChatCompletions)
 	}
 
 	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）
@@ -77,7 +91,10 @@ func RegisterGatewayRoutes(
 
 	// OpenAI Responses API（不带v1前缀的别名）
 	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.Responses)
+	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.Responses)
 	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
+	// OpenAI Chat Completions API（不带v1前缀的别名）
+	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ChatCompletions)
 
 	// Antigravity 模型列表
 	r.GET("/antigravity/models", gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.AntigravityModels)
@@ -131,4 +148,13 @@ func RegisterGatewayRoutes(
 	}
 	// Sora 媒体代理（签名 URL，无需 API Key）
 	r.GET("/sora/media-signed/*filepath", h.SoraGateway.MediaProxySigned)
+}
+
+// getGroupPlatform extracts the group platform from the API Key stored in context.
+func getGroupPlatform(c *gin.Context) string {
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey.Group == nil {
+		return ""
+	}
+	return apiKey.Group.Platform
 }

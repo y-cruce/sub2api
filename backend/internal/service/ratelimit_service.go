@@ -28,6 +28,17 @@ type RateLimitService struct {
 	usageCache            map[int64]*geminiUsageCacheEntry
 }
 
+// SuccessfulTestRecoveryResult 表示测试成功后恢复了哪些运行时状态。
+type SuccessfulTestRecoveryResult struct {
+	ClearedError     bool
+	ClearedRateLimit bool
+}
+
+// AccountRecoveryOptions 控制账号恢复时的附加行为。
+type AccountRecoveryOptions struct {
+	InvalidateToken bool
+}
+
 type geminiUsageCacheEntry struct {
 	windowStart time.Time
 	cachedAt    time.Time
@@ -87,6 +98,9 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 		slog.Info("account_error_code_skipped", "account_id", account.ID, "status_code", statusCode)
 		return ErrorPolicySkipped
 	}
+	if account.IsPoolMode() {
+		return ErrorPolicySkipped
+	}
 	if s.tryTempUnschedulable(ctx, account, statusCode, responseBody) {
 		return ErrorPolicyTempUnscheduled
 	}
@@ -96,9 +110,16 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 // HandleUpstreamError 处理上游错误响应，标记账号状态
 // 返回是否应该停止该账号的调度
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) (shouldDisable bool) {
+	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
+
+	// 池模式默认不标记本地账号状态；仅当用户显式配置自定义错误码时按本地策略处理。
+	if account.IsPoolMode() && !customErrorCodesEnabled {
+		slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
+		return false
+	}
+
 	// apikey 类型账号：检查自定义错误码配置
 	// 如果启用且错误码不在列表中，则不处理（不停止调度、不标记限流/过载）
-	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
 	if !account.ShouldHandleErrorCode(statusCode) {
 		slog.Info("account_error_code_skipped", "account_id", account.ID, "status_code", statusCode)
 		return false
@@ -615,6 +636,7 @@ func (s *RateLimitService) handleCustomErrorCode(ctx context.Context, account *A
 func (s *RateLimitService) handle429(ctx context.Context, account *Account, headers http.Header, responseBody []byte) {
 	// 1. OpenAI 平台：优先尝试解析 x-codex-* 响应头（用于 rate_limit_exceeded）
 	if account.Platform == PlatformOpenAI {
+		s.persistOpenAICodexSnapshot(ctx, account, headers)
 		if resetAt := s.calculateOpenAI429ResetTime(headers); resetAt != nil {
 			if err := s.accountRepo.SetRateLimited(ctx, account.ID, *resetAt); err != nil {
 				slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
@@ -878,6 +900,23 @@ func pickSooner(a, b *time.Time) *time.Time {
 	}
 }
 
+func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, account *Account, headers http.Header) {
+	if s == nil || s.accountRepo == nil || account == nil || headers == nil {
+		return
+	}
+	snapshot := ParseCodexRateLimitHeaders(headers)
+	if snapshot == nil {
+		return
+	}
+	updates := buildCodexUsageExtraUpdates(snapshot, time.Now())
+	if len(updates) == 0 {
+		return
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+		slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
+	}
+}
+
 // parseOpenAIRateLimitResetTime 解析 OpenAI 格式的 429 响应，返回重置时间的 Unix 时间戳
 // OpenAI 的 usage_limit_reached 错误格式：
 //
@@ -970,10 +1009,25 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
 		windowStart = &start
 		windowEnd = &end
 		slog.Info("account_session_window_initialized", "account_id", account.ID, "window_start", start, "window_end", end, "status", status)
+		// 窗口重置时清除旧的 utilization，避免残留上个窗口的数据
+		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+			"session_window_utilization": nil,
+		})
 	}
 
 	if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, windowStart, windowEnd, status); err != nil {
 		slog.Warn("session_window_update_failed", "account_id", account.ID, "error", err)
+	}
+
+	// 存储真实的 utilization 值（0-1 小数），供 estimateSetupTokenUsage 使用
+	if utilStr := headers.Get("anthropic-ratelimit-unified-5h-utilization"); utilStr != "" {
+		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+			if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+				"session_window_utilization": util,
+			}); err != nil {
+				slog.Warn("session_window_utilization_update_failed", "account_id", account.ID, "error", err)
+			}
+		}
 	}
 
 	// 如果状态为allowed且之前有限流，说明窗口已重置，清除限流状态
@@ -1007,6 +1061,42 @@ func (s *RateLimitService) ClearRateLimit(ctx context.Context, accountID int64) 
 	return nil
 }
 
+// RecoverAccountState 按需恢复账号的可恢复运行时状态。
+func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID int64, options AccountRecoveryOptions) (*SuccessfulTestRecoveryResult, error) {
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &SuccessfulTestRecoveryResult{}
+	if account.Status == StatusError {
+		if err := s.accountRepo.ClearError(ctx, accountID); err != nil {
+			return nil, err
+		}
+		result.ClearedError = true
+		if options.InvalidateToken && s.tokenCacheInvalidator != nil && account.IsOAuth() {
+			if invalidateErr := s.tokenCacheInvalidator.InvalidateToken(ctx, account); invalidateErr != nil {
+				slog.Warn("recover_account_state_invalidate_token_failed", "account_id", accountID, "error", invalidateErr)
+			}
+		}
+	}
+
+	if hasRecoverableRuntimeState(account) {
+		if err := s.ClearRateLimit(ctx, accountID); err != nil {
+			return nil, err
+		}
+		result.ClearedRateLimit = true
+	}
+
+	return result, nil
+}
+
+// RecoverAccountAfterSuccessfulTest 将一次成功测试视为正常请求，
+// 按需恢复 error / rate-limit / overload / temp-unsched / model-rate-limit 等运行时状态。
+func (s *RateLimitService) RecoverAccountAfterSuccessfulTest(ctx context.Context, accountID int64) (*SuccessfulTestRecoveryResult, error) {
+	return s.RecoverAccountState(ctx, accountID, AccountRecoveryOptions{})
+}
+
 func (s *RateLimitService) ClearTempUnschedulable(ctx context.Context, accountID int64) error {
 	if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
 		return err
@@ -1021,6 +1111,36 @@ func (s *RateLimitService) ClearTempUnschedulable(ctx context.Context, accountID
 		slog.Warn("clear_model_rate_limits_on_temp_unsched_reset_failed", "account_id", accountID, "error", err)
 	}
 	return nil
+}
+
+func hasRecoverableRuntimeState(account *Account) bool {
+	if account == nil {
+		return false
+	}
+	if account.RateLimitedAt != nil || account.RateLimitResetAt != nil || account.OverloadUntil != nil || account.TempUnschedulableUntil != nil {
+		return true
+	}
+	if len(account.Extra) == 0 {
+		return false
+	}
+	return hasNonEmptyMapValue(account.Extra, "model_rate_limits") || hasNonEmptyMapValue(account.Extra, "antigravity_quota_scopes")
+}
+
+func hasNonEmptyMapValue(extra map[string]any, key string) bool {
+	raw, ok := extra[key]
+	if !ok || raw == nil {
+		return false
+	}
+	switch typed := raw.(type) {
+	case map[string]any:
+		return len(typed) > 0
+	case map[string]string:
+		return len(typed) > 0
+	case []any:
+		return len(typed) > 0
+	default:
+		return true
+	}
 }
 
 func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID int64) (*TempUnschedState, error) {

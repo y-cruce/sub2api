@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/y-cruce/sub2api/internal/handler/dto"
 	"github.com/y-cruce/sub2api/internal/pkg/antigravity"
 	"github.com/y-cruce/sub2api/internal/pkg/claude"
+	infraerrors "github.com/y-cruce/sub2api/internal/pkg/errors"
 	"github.com/y-cruce/sub2api/internal/pkg/geminicli"
 	"github.com/y-cruce/sub2api/internal/pkg/openai"
 	"github.com/y-cruce/sub2api/internal/pkg/response"
@@ -122,7 +124,7 @@ type UpdateAccountRequest struct {
 	Priority                *int           `json:"priority"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
-	Status                  string         `json:"status" binding:"omitempty,oneof=active inactive"`
+	Status                  string         `json:"status" binding:"omitempty,oneof=active inactive error"`
 	GroupIDs                *[]int64       `json:"group_ids"`
 	ExpiresAt               *int64         `json:"expires_at"`
 	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
@@ -288,48 +290,32 @@ func (h *AccountHandler) List(c *gin.Context) {
 		}
 	}
 
-	// 窗口费用获取：lite 模式从快照缓存读取，非 lite 模式执行 PostgreSQL 查询后写入缓存
+	// 始终获取窗口费用（PostgreSQL 聚合查询）
 	if len(windowCostAccountIDs) > 0 {
-		if lite {
-			// lite 模式：尝试从快照缓存读取
-			cacheKey := buildWindowCostCacheKey(windowCostAccountIDs)
-			if cached, ok := accountWindowCostCache.Get(cacheKey); ok {
-				if costs, ok := cached.Payload.(map[int64]float64); ok {
-					windowCosts = costs
-				}
-			}
-			// 缓存未命中则 windowCosts 保持 nil（仅发生在服务刚启动时）
-		} else {
-			// 非 lite 模式：执行 PostgreSQL 聚合查询（高开销）
-			windowCosts = make(map[int64]float64)
-			var mu sync.Mutex
-			g, gctx := errgroup.WithContext(c.Request.Context())
-			g.SetLimit(10) // 限制并发数
+		windowCosts = make(map[int64]float64)
+		var mu sync.Mutex
+		g, gctx := errgroup.WithContext(c.Request.Context())
+		g.SetLimit(10) // 限制并发数
 
-			for i := range accounts {
-				acc := &accounts[i]
-				if !acc.IsAnthropicOAuthOrSetupToken() || acc.GetWindowCostLimit() <= 0 {
-					continue
-				}
-				accCopy := acc // 闭包捕获
-				g.Go(func() error {
-					// 使用统一的窗口开始时间计算逻辑（考虑窗口过期情况）
-					startTime := accCopy.GetCurrentWindowStartTime()
-					stats, err := h.accountUsageService.GetAccountWindowStats(gctx, accCopy.ID, startTime)
-					if err == nil && stats != nil {
-						mu.Lock()
-						windowCosts[accCopy.ID] = stats.StandardCost // 使用标准费用
-						mu.Unlock()
-					}
-					return nil // 不返回错误，允许部分失败
-				})
+		for i := range accounts {
+			acc := &accounts[i]
+			if !acc.IsAnthropicOAuthOrSetupToken() || acc.GetWindowCostLimit() <= 0 {
+				continue
 			}
-			_ = g.Wait()
-
-			// 查询完毕后写入快照缓存，供 lite 模式使用
-			cacheKey := buildWindowCostCacheKey(windowCostAccountIDs)
-			accountWindowCostCache.Set(cacheKey, windowCosts)
+			accCopy := acc // 闭包捕获
+			g.Go(func() error {
+				// 使用统一的窗口开始时间计算逻辑（考虑窗口过期情况）
+				startTime := accCopy.GetCurrentWindowStartTime()
+				stats, err := h.accountUsageService.GetAccountWindowStats(gctx, accCopy.ID, startTime)
+				if err == nil && stats != nil {
+					mu.Lock()
+					windowCosts[accCopy.ID] = stats.StandardCost // 使用标准费用
+					mu.Unlock()
+				}
+				return nil // 不返回错误，允许部分失败
+			})
 		}
+		_ = g.Wait()
 	}
 
 	// Build response with concurrency info
@@ -642,6 +628,7 @@ func (h *AccountHandler) Delete(c *gin.Context) {
 // TestAccountRequest represents the request body for testing an account
 type TestAccountRequest struct {
 	ModelID string `json:"model_id"`
+	Prompt  string `json:"prompt"`
 }
 
 type SyncFromCRSRequest struct {
@@ -672,10 +659,46 @@ func (h *AccountHandler) Test(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 
 	// Use AccountTestService to test the account with SSE streaming
-	if err := h.accountTestService.TestAccountConnection(c, accountID, req.ModelID); err != nil {
+	if err := h.accountTestService.TestAccountConnection(c, accountID, req.ModelID, req.Prompt); err != nil {
 		// Error already sent via SSE, just log
 		return
 	}
+
+	if h.rateLimitService != nil {
+		if _, err := h.rateLimitService.RecoverAccountAfterSuccessfulTest(c.Request.Context(), accountID); err != nil {
+			_ = c.Error(err)
+		}
+	}
+}
+
+// RecoverState handles unified recovery of recoverable account runtime state.
+// POST /api/v1/admin/accounts/:id/recover-state
+func (h *AccountHandler) RecoverState(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	if h.rateLimitService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Rate limit service unavailable")
+		return
+	}
+
+	if _, err := h.rateLimitService.RecoverAccountState(c.Request.Context(), accountID, service.AccountRecoveryOptions{
+		InvalidateToken: true,
+	}); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
 }
 
 // SyncFromCRS handles syncing accounts from claude-relay-service (CRS)
@@ -731,52 +754,31 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 	response.Success(c, result)
 }
 
-// Refresh handles refreshing account credentials
-// POST /api/v1/admin/accounts/:id/refresh
-func (h *AccountHandler) Refresh(c *gin.Context) {
-	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid account ID")
-		return
-	}
-
-	// Get account
-	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
-	if err != nil {
-		response.NotFound(c, "Account not found")
-		return
-	}
-
-	// Only refresh OAuth-based accounts (oauth and setup-token)
+// refreshSingleAccount refreshes credentials for a single OAuth account.
+// Returns (updatedAccount, warning, error) where warning is used for Antigravity ProjectIDMissing scenario.
+func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
 	if !account.IsOAuth() {
-		response.BadRequest(c, "Cannot refresh non-OAuth account credentials")
-		return
+		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "cannot refresh non-OAuth account")
 	}
 
 	var newCredentials map[string]any
 
 	if account.IsOpenAI() {
-		// Use OpenAI OAuth service to refresh token
-		tokenInfo, err := h.openaiOAuthService.RefreshAccountToken(c.Request.Context(), account)
+		tokenInfo, err := h.openaiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
-			response.ErrorFrom(c, err)
-			return
+			return nil, "", err
 		}
 
-		// Build new credentials from token info
 		newCredentials = h.openaiOAuthService.BuildAccountCredentials(tokenInfo)
-
-		// Preserve non-token settings from existing credentials
 		for k, v := range account.Credentials {
 			if _, exists := newCredentials[k]; !exists {
 				newCredentials[k] = v
 			}
 		}
 	} else if account.Platform == service.PlatformGemini {
-		tokenInfo, err := h.geminiOAuthService.RefreshAccountToken(c.Request.Context(), account)
+		tokenInfo, err := h.geminiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
-			response.InternalError(c, "Failed to refresh credentials: "+err.Error())
-			return
+			return nil, "", fmt.Errorf("failed to refresh credentials: %w", err)
 		}
 
 		newCredentials = h.geminiOAuthService.BuildAccountCredentials(tokenInfo)
@@ -786,10 +788,9 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 			}
 		}
 	} else if account.Platform == service.PlatformAntigravity {
-		tokenInfo, err := h.antigravityOAuthService.RefreshAccountToken(c.Request.Context(), account)
+		tokenInfo, err := h.antigravityOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
-			response.ErrorFrom(c, err)
-			return
+			return nil, "", err
 		}
 
 		newCredentials = h.antigravityOAuthService.BuildAccountCredentials(tokenInfo)
@@ -808,37 +809,27 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 		}
 
 		// 如果 project_id 获取失败，更新凭证但不标记为 error
-		// LoadCodeAssist 失败可能是临时网络问题，给它机会在下次自动刷新时重试
 		if tokenInfo.ProjectIDMissing {
-			// 先更新凭证（token 本身刷新成功了）
-			_, updateErr := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
+			updatedAccount, updateErr := h.adminService.UpdateAccount(ctx, account.ID, &service.UpdateAccountInput{
 				Credentials: newCredentials,
 			})
 			if updateErr != nil {
-				response.InternalError(c, "Failed to update credentials: "+updateErr.Error())
-				return
+				return nil, "", fmt.Errorf("failed to update credentials: %w", updateErr)
 			}
-			// 不标记为 error，只返回警告信息
-			response.Success(c, gin.H{
-				"message": "Token refreshed successfully, but project_id could not be retrieved (will retry automatically)",
-				"warning": "missing_project_id_temporary",
-			})
-			return
+			return updatedAccount, "missing_project_id_temporary", nil
 		}
 
 		// 成功获取到 project_id，如果之前是 missing_project_id 错误则清除
 		if account.Status == service.StatusError && strings.Contains(account.ErrorMessage, "missing_project_id:") {
-			if _, clearErr := h.adminService.ClearAccountError(c.Request.Context(), accountID); clearErr != nil {
-				response.InternalError(c, "Failed to clear account error: "+clearErr.Error())
-				return
+			if _, clearErr := h.adminService.ClearAccountError(ctx, account.ID); clearErr != nil {
+				return nil, "", fmt.Errorf("failed to clear account error: %w", clearErr)
 			}
 		}
 	} else {
 		// Use Anthropic/Claude OAuth service to refresh token
-		tokenInfo, err := h.oauthService.RefreshAccountToken(c.Request.Context(), account)
+		tokenInfo, err := h.oauthService.RefreshAccountToken(ctx, account)
 		if err != nil {
-			response.ErrorFrom(c, err)
-			return
+			return nil, "", err
 		}
 
 		// Copy existing credentials to preserve non-token settings (e.g., intercept_warmup_requests)
@@ -860,20 +851,54 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 		}
 	}
 
-	updatedAccount, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
+	updatedAccount, err := h.adminService.UpdateAccount(ctx, account.ID, &service.UpdateAccountInput{
 		Credentials: newCredentials,
 	})
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 刷新成功后，清除 token 缓存，确保下次请求使用新 token
+	if h.tokenCacheInvalidator != nil {
+		if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(ctx, updatedAccount); invalidateErr != nil {
+			log.Printf("[WARN] Failed to invalidate token cache for account %d: %v", updatedAccount.ID, invalidateErr)
+		}
+	}
+
+	// OpenAI OAuth: 刷新成功后检查并设置 privacy_mode
+	h.adminService.EnsureOpenAIPrivacy(ctx, updatedAccount)
+
+	return updatedAccount, "", nil
+}
+
+// Refresh handles refreshing account credentials
+// POST /api/v1/admin/accounts/:id/refresh
+func (h *AccountHandler) Refresh(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	// Get account
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.NotFound(c, "Account not found")
+		return
+	}
+
+	updatedAccount, warning, err := h.refreshSingleAccount(c.Request.Context(), account)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	// 刷新成功后，清除 token 缓存，确保下次请求使用新 token
-	if h.tokenCacheInvalidator != nil {
-		if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(c.Request.Context(), updatedAccount); invalidateErr != nil {
-			// 缓存失效失败只记录日志，不影响主流程
-			_ = c.Error(invalidateErr)
-		}
+	if warning == "missing_project_id_temporary" {
+		response.Success(c, gin.H{
+			"message": "Token refreshed successfully, but project_id could not be retrieved (will retry automatically)",
+			"warning": "missing_project_id_temporary",
+		})
+		return
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), updatedAccount))
@@ -929,12 +954,173 @@ func (h *AccountHandler) ClearError(c *gin.Context) {
 	// 这解决了管理员重置账号状态后，旧的失效 token 仍在缓存中导致立即再次 401 的问题
 	if h.tokenCacheInvalidator != nil && account.IsOAuth() {
 		if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(c.Request.Context(), account); invalidateErr != nil {
-			// 缓存失效失败只记录日志，不影响主流程
-			_ = c.Error(invalidateErr)
+			log.Printf("[WARN] Failed to invalidate token cache for account %d: %v", accountID, invalidateErr)
 		}
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+}
+
+// BatchClearError handles batch clearing account errors
+// POST /api/v1/admin/accounts/batch-clear-error
+func (h *AccountHandler) BatchClearError(c *gin.Context) {
+	var req struct {
+		AccountIDs []int64 `json:"account_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if len(req.AccountIDs) == 0 {
+		response.BadRequest(c, "account_ids is required")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	const maxConcurrency = 10
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrency)
+
+	var mu sync.Mutex
+	var successCount, failedCount int
+	var errors []gin.H
+
+	// 注意：所有 goroutine 必须 return nil，避免 errgroup cancel 其他并发任务
+	for _, id := range req.AccountIDs {
+		accountID := id // 闭包捕获
+		g.Go(func() error {
+			account, err := h.adminService.ClearAccountError(gctx, accountID)
+			if err != nil {
+				mu.Lock()
+				failedCount++
+				errors = append(errors, gin.H{
+					"account_id": accountID,
+					"error":      err.Error(),
+				})
+				mu.Unlock()
+				return nil
+			}
+
+			// 清除错误后，同时清除 token 缓存
+			if h.tokenCacheInvalidator != nil && account.IsOAuth() {
+				if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(gctx, account); invalidateErr != nil {
+					log.Printf("[WARN] Failed to invalidate token cache for account %d: %v", accountID, invalidateErr)
+				}
+			}
+
+			mu.Lock()
+			successCount++
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"total":   len(req.AccountIDs),
+		"success": successCount,
+		"failed":  failedCount,
+		"errors":  errors,
+	})
+}
+
+// BatchRefresh handles batch refreshing account credentials
+// POST /api/v1/admin/accounts/batch-refresh
+func (h *AccountHandler) BatchRefresh(c *gin.Context) {
+	var req struct {
+		AccountIDs []int64 `json:"account_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if len(req.AccountIDs) == 0 {
+		response.BadRequest(c, "account_ids is required")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	accounts, err := h.adminService.GetAccountsByIDs(ctx, req.AccountIDs)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	// 建立已获取账号的 ID 集合，检测缺失的 ID
+	foundIDs := make(map[int64]bool, len(accounts))
+	for _, acc := range accounts {
+		if acc != nil {
+			foundIDs[acc.ID] = true
+		}
+	}
+
+	const maxConcurrency = 10
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrency)
+
+	var mu sync.Mutex
+	var successCount, failedCount int
+	var errors []gin.H
+	var warnings []gin.H
+
+	// 将不存在的账号 ID 标记为失败
+	for _, id := range req.AccountIDs {
+		if !foundIDs[id] {
+			failedCount++
+			errors = append(errors, gin.H{
+				"account_id": id,
+				"error":      "account not found",
+			})
+		}
+	}
+
+	// 注意：所有 goroutine 必须 return nil，避免 errgroup cancel 其他并发任务
+	for _, account := range accounts {
+		acc := account // 闭包捕获
+		if acc == nil {
+			continue
+		}
+		g.Go(func() error {
+			_, warning, err := h.refreshSingleAccount(gctx, acc)
+			mu.Lock()
+			if err != nil {
+				failedCount++
+				errors = append(errors, gin.H{
+					"account_id": acc.ID,
+					"error":      err.Error(),
+				})
+			} else {
+				successCount++
+				if warning != "" {
+					warnings = append(warnings, gin.H{
+						"account_id": acc.ID,
+						"warning":    warning,
+					})
+				}
+			}
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"total":    len(req.AccountIDs),
+		"success":  successCount,
+		"failed":   failedCount,
+		"errors":   errors,
+		"warnings": warnings,
+	})
 }
 
 // BatchCreate handles batch creating accounts

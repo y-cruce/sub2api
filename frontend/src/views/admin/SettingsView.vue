@@ -307,7 +307,216 @@
             </template>
           </div>
         </div>
-        </div><!-- /Tab: Gateway — Stream Timeout (continued below with Claude Code & Scheduling) -->
+
+        <!-- Request Rectifier Settings -->
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.rectifier.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.rectifier.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <!-- Loading State -->
+            <div v-if="rectifierLoading" class="flex items-center gap-2 text-gray-500">
+              <div class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"></div>
+              {{ t('common.loading') }}
+            </div>
+
+            <template v-else>
+              <!-- Master Toggle -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">{{
+                    t('admin.settings.rectifier.enabled')
+                  }}</label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.rectifier.enabledHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="rectifierForm.enabled" />
+              </div>
+
+              <!-- Sub-toggles (only show when master is enabled) -->
+              <div
+                v-if="rectifierForm.enabled"
+                class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <!-- Thinking Signature Rectifier -->
+                <div class="flex items-center justify-between">
+                  <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300">{{
+                      t('admin.settings.rectifier.thinkingSignature')
+                    }}</label>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.rectifier.thinkingSignatureHint') }}
+                    </p>
+                  </div>
+                  <Toggle v-model="rectifierForm.thinking_signature_enabled" />
+                </div>
+
+                <!-- Thinking Budget Rectifier -->
+                <div class="flex items-center justify-between">
+                  <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300">{{
+                      t('admin.settings.rectifier.thinkingBudget')
+                    }}</label>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.settings.rectifier.thinkingBudgetHint') }}
+                    </p>
+                  </div>
+                  <Toggle v-model="rectifierForm.thinking_budget_enabled" />
+                </div>
+              </div>
+
+              <!-- Save Button -->
+              <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700">
+                <button
+                  type="button"
+                  @click="saveRectifierSettings"
+                  :disabled="rectifierSaving"
+                  class="btn btn-primary btn-sm"
+                >
+                  <svg
+                    v-if="rectifierSaving"
+                    class="mr-1 h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  {{ rectifierSaving ? t('common.saving') : t('common.save') }}
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+        <!-- Beta Policy Settings -->
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.betaPolicy.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.betaPolicy.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <!-- Loading State -->
+            <div v-if="betaPolicyLoading" class="flex items-center gap-2 text-gray-500">
+              <div class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"></div>
+              {{ t('common.loading') }}
+            </div>
+
+            <template v-else>
+              <!-- Rule Cards -->
+              <div
+                v-for="rule in betaPolicyForm.rules"
+                :key="rule.beta_token"
+                class="rounded-lg border border-gray-200 p-4 dark:border-dark-600"
+              >
+                <div class="mb-3 flex items-center gap-2">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">
+                    {{ getBetaDisplayName(rule.beta_token) }}
+                  </span>
+                  <span class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-dark-700 dark:text-gray-400">
+                    {{ rule.beta_token }}
+                  </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                  <!-- Action -->
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      {{ t('admin.settings.betaPolicy.action') }}
+                    </label>
+                    <Select
+                      :modelValue="rule.action"
+                      @update:modelValue="rule.action = $event as any"
+                      :options="betaPolicyActionOptions"
+                    />
+                  </div>
+
+                  <!-- Scope -->
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      {{ t('admin.settings.betaPolicy.scope') }}
+                    </label>
+                    <Select
+                      :modelValue="rule.scope"
+                      @update:modelValue="rule.scope = $event as any"
+                      :options="betaPolicyScopeOptions"
+                    />
+                  </div>
+                </div>
+
+                <!-- Error Message (only when action=block) -->
+                <div v-if="rule.action === 'block'" class="mt-3">
+                  <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                    {{ t('admin.settings.betaPolicy.errorMessage') }}
+                  </label>
+                  <input
+                    v-model="rule.error_message"
+                    type="text"
+                    class="input"
+                    :placeholder="t('admin.settings.betaPolicy.errorMessagePlaceholder')"
+                  />
+                  <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    {{ t('admin.settings.betaPolicy.errorMessageHint') }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Save Button -->
+              <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700">
+                <button
+                  type="button"
+                  @click="saveBetaPolicySettings"
+                  :disabled="betaPolicySaving"
+                  class="btn btn-primary btn-sm"
+                >
+                  <svg
+                    v-if="betaPolicySaving"
+                    class="mr-1 h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  {{ betaPolicySaving ? t('common.saving') : t('common.save') }}
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        </div><!-- /Tab: Gateway -->
 
         <!-- Tab: Security — Registration, Turnstile, LinuxDo -->
         <div v-show="activeTab === 'security'" class="space-y-6">
@@ -1520,6 +1729,27 @@ const streamTimeoutForm = reactive({
   threshold_window_minutes: 10
 })
 
+// Rectifier 状态
+const rectifierLoading = ref(true)
+const rectifierSaving = ref(false)
+const rectifierForm = reactive({
+  enabled: true,
+  thinking_signature_enabled: true,
+  thinking_budget_enabled: true
+})
+
+// Beta Policy 状态
+const betaPolicyLoading = ref(true)
+const betaPolicySaving = ref(false)
+const betaPolicyForm = reactive({
+  rules: [] as Array<{
+    beta_token: string
+    action: 'pass' | 'filter' | 'block'
+    scope: 'all' | 'oauth' | 'apikey'
+    error_message?: string
+  }>
+})
+
 interface DefaultSubscriptionGroupOption {
   value: number
   label: string
@@ -2026,11 +2256,96 @@ async function saveStreamTimeoutSettings() {
   }
 }
 
+// Rectifier 方法
+async function loadRectifierSettings() {
+  rectifierLoading.value = true
+  try {
+    const settings = await adminAPI.settings.getRectifierSettings()
+    Object.assign(rectifierForm, settings)
+  } catch (error: any) {
+    console.error('Failed to load rectifier settings:', error)
+  } finally {
+    rectifierLoading.value = false
+  }
+}
+
+async function saveRectifierSettings() {
+  rectifierSaving.value = true
+  try {
+    const updated = await adminAPI.settings.updateRectifierSettings({
+      enabled: rectifierForm.enabled,
+      thinking_signature_enabled: rectifierForm.thinking_signature_enabled,
+      thinking_budget_enabled: rectifierForm.thinking_budget_enabled
+    })
+    Object.assign(rectifierForm, updated)
+    appStore.showSuccess(t('admin.settings.rectifier.saved'))
+  } catch (error: any) {
+    appStore.showError(
+      t('admin.settings.rectifier.saveFailed') + ': ' + (error.message || t('common.unknownError'))
+    )
+  } finally {
+    rectifierSaving.value = false
+  }
+}
+
+const betaPolicyActionOptions = computed(() => [
+  { value: 'pass', label: t('admin.settings.betaPolicy.actionPass') },
+  { value: 'filter', label: t('admin.settings.betaPolicy.actionFilter') },
+  { value: 'block', label: t('admin.settings.betaPolicy.actionBlock') }
+])
+
+const betaPolicyScopeOptions = computed(() => [
+  { value: 'all', label: t('admin.settings.betaPolicy.scopeAll') },
+  { value: 'oauth', label: t('admin.settings.betaPolicy.scopeOAuth') },
+  { value: 'apikey', label: t('admin.settings.betaPolicy.scopeAPIKey') }
+])
+
+// Beta Policy 方法
+const betaDisplayNames: Record<string, string> = {
+  'fast-mode-2026-02-01': 'Fast Mode',
+  'context-1m-2025-08-07': 'Context 1M'
+}
+
+function getBetaDisplayName(token: string): string {
+  return betaDisplayNames[token] || token
+}
+
+async function loadBetaPolicySettings() {
+  betaPolicyLoading.value = true
+  try {
+    const settings = await adminAPI.settings.getBetaPolicySettings()
+    betaPolicyForm.rules = settings.rules
+  } catch (error: any) {
+    console.error('Failed to load beta policy settings:', error)
+  } finally {
+    betaPolicyLoading.value = false
+  }
+}
+
+async function saveBetaPolicySettings() {
+  betaPolicySaving.value = true
+  try {
+    const updated = await adminAPI.settings.updateBetaPolicySettings({
+      rules: betaPolicyForm.rules
+    })
+    betaPolicyForm.rules = updated.rules
+    appStore.showSuccess(t('admin.settings.betaPolicy.saved'))
+  } catch (error: any) {
+    appStore.showError(
+      t('admin.settings.betaPolicy.saveFailed') + ': ' + (error.message || t('common.unknownError'))
+    )
+  } finally {
+    betaPolicySaving.value = false
+  }
+}
+
 onMounted(() => {
   loadSettings()
   loadSubscriptionGroups()
   loadAdminApiKey()
   loadStreamTimeoutSettings()
+  loadRectifierSettings()
+  loadBetaPolicySettings()
 })
 </script>
 

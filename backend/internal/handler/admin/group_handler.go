@@ -53,6 +53,9 @@ type CreateGroupRequest struct {
 	SupportedModelScopes []string `json:"supported_model_scopes"`
 	// Sora 存储配额
 	SoraStorageQuotaBytes int64 `json:"sora_storage_quota_bytes"`
+	// OpenAI Messages 调度配置（仅 openai 平台使用）
+	AllowMessagesDispatch bool   `json:"allow_messages_dispatch"`
+	DefaultMappedModel    string `json:"default_mapped_model"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -88,6 +91,9 @@ type UpdateGroupRequest struct {
 	SupportedModelScopes *[]string `json:"supported_model_scopes"`
 	// Sora 存储配额
 	SoraStorageQuotaBytes *int64 `json:"sora_storage_quota_bytes"`
+	// OpenAI Messages 调度配置（仅 openai 平台使用）
+	AllowMessagesDispatch *bool   `json:"allow_messages_dispatch"`
+	DefaultMappedModel    *string `json:"default_mapped_model"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -203,6 +209,8 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		MCPXMLInject:                    req.MCPXMLInject,
 		SupportedModelScopes:            req.SupportedModelScopes,
 		SoraStorageQuotaBytes:           req.SoraStorageQuotaBytes,
+		AllowMessagesDispatch:           req.AllowMessagesDispatch,
+		DefaultMappedModel:              req.DefaultMappedModel,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
@@ -254,6 +262,8 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		MCPXMLInject:                    req.MCPXMLInject,
 		SupportedModelScopes:            req.SupportedModelScopes,
 		SoraStorageQuotaBytes:           req.SoraStorageQuotaBytes,
+		AllowMessagesDispatch:           req.AllowMessagesDispatch,
+		DefaultMappedModel:              req.DefaultMappedModel,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
@@ -323,6 +333,72 @@ func (h *GroupHandler) GetGroupAPIKeys(c *gin.Context) {
 		outKeys = append(outKeys, *dto.APIKeyFromService(&keys[i]))
 	}
 	response.Paginated(c, outKeys, total, page, pageSize)
+}
+
+// GetGroupRateMultipliers handles getting rate multipliers for users in a group
+// GET /api/v1/admin/groups/:id/rate-multipliers
+func (h *GroupHandler) GetGroupRateMultipliers(c *gin.Context) {
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+
+	entries, err := h.adminService.GetGroupRateMultipliers(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	if entries == nil {
+		entries = []service.UserGroupRateEntry{}
+	}
+	response.Success(c, entries)
+}
+
+// ClearGroupRateMultipliers handles clearing all rate multipliers for a group
+// DELETE /api/v1/admin/groups/:id/rate-multipliers
+func (h *GroupHandler) ClearGroupRateMultipliers(c *gin.Context) {
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+
+	if err := h.adminService.ClearGroupRateMultipliers(c.Request.Context(), groupID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"message": "Rate multipliers cleared successfully"})
+}
+
+// BatchSetGroupRateMultipliersRequest represents batch set rate multipliers request
+type BatchSetGroupRateMultipliersRequest struct {
+	Entries []service.GroupRateMultiplierInput `json:"entries" binding:"required"`
+}
+
+// BatchSetGroupRateMultipliers handles batch setting rate multipliers for a group
+// PUT /api/v1/admin/groups/:id/rate-multipliers
+func (h *GroupHandler) BatchSetGroupRateMultipliers(c *gin.Context) {
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+
+	var req BatchSetGroupRateMultipliersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	if err := h.adminService.BatchSetGroupRateMultipliers(c.Request.Context(), groupID, req.Entries); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"message": "Rate multipliers updated successfully"})
 }
 
 // UpdateSortOrderRequest represents the request to update group sort orders

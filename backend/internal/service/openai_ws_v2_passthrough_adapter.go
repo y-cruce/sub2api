@@ -77,6 +77,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		return errors.New("token is empty")
 	}
 	requestModel := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "model").String())
+	requestServiceTier := extractOpenAIServiceTierFromBody(firstClientMessage)
 	requestPreviousResponseID := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "previous_response_id").String())
 	logOpenAIWSV2Passthrough(
 		"relay_start account_id=%d model=%s previous_response_id=%s first_message_type=%s first_message_bytes=%d",
@@ -107,7 +108,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 
 	isCodexCLI := false
 	if c != nil {
-		isCodexCLI = openai.IsCodexCLIRequest(c.GetHeader("User-Agent"))
+		isCodexCLI = openai.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
 	}
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		isCodexCLI = true
@@ -177,11 +178,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 						CacheCreationInputTokens: turn.Usage.CacheCreationInputTokens,
 						CacheReadInputTokens:     turn.Usage.CacheReadInputTokens,
 					},
-					Model:        turn.RequestModel,
-					Stream:       true,
-					OpenAIWSMode: true,
-					Duration:     turn.Duration,
-					FirstTokenMs: turn.FirstTokenMs,
+					Model:           turn.RequestModel,
+					ServiceTier:     requestServiceTier,
+					Stream:          true,
+					OpenAIWSMode:    true,
+					ResponseHeaders: cloneHeader(handshakeHeaders),
+					Duration:        turn.Duration,
+					FirstTokenMs:    turn.FirstTokenMs,
 				}
 				logOpenAIWSV2Passthrough(
 					"relay_turn_completed account_id=%d turn=%d request_id=%s terminal_event=%s duration_ms=%d first_token_ms=%d input_tokens=%d output_tokens=%d cache_read_tokens=%d",
@@ -223,11 +226,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			CacheCreationInputTokens: relayResult.Usage.CacheCreationInputTokens,
 			CacheReadInputTokens:     relayResult.Usage.CacheReadInputTokens,
 		},
-		Model:        relayResult.RequestModel,
-		Stream:       true,
-		OpenAIWSMode: true,
-		Duration:     relayResult.Duration,
-		FirstTokenMs: relayResult.FirstTokenMs,
+		Model:           relayResult.RequestModel,
+		ServiceTier:     requestServiceTier,
+		Stream:          true,
+		OpenAIWSMode:    true,
+		ResponseHeaders: cloneHeader(handshakeHeaders),
+		Duration:        relayResult.Duration,
+		FirstTokenMs:    relayResult.FirstTokenMs,
 	}
 
 	turnCount := int(completedTurns.Load())

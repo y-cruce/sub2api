@@ -273,6 +273,84 @@ export async function updateStreamTimeoutSettings(
   return data
 }
 
+// ==================== Rectifier Settings ====================
+
+/**
+ * Rectifier settings interface
+ */
+export interface RectifierSettings {
+  enabled: boolean
+  thinking_signature_enabled: boolean
+  thinking_budget_enabled: boolean
+}
+
+/**
+ * Get rectifier settings
+ * @returns Rectifier settings
+ */
+export async function getRectifierSettings(): Promise<RectifierSettings> {
+  const { data } = await apiClient.get<RectifierSettings>('/admin/settings/rectifier')
+  return data
+}
+
+/**
+ * Update rectifier settings
+ * @param settings - Rectifier settings to update
+ * @returns Updated settings
+ */
+export async function updateRectifierSettings(
+  settings: RectifierSettings
+): Promise<RectifierSettings> {
+  const { data } = await apiClient.put<RectifierSettings>(
+    '/admin/settings/rectifier',
+    settings
+  )
+  return data
+}
+
+// ==================== Beta Policy Settings ====================
+
+/**
+ * Beta policy rule interface
+ */
+export interface BetaPolicyRule {
+  beta_token: string
+  action: 'pass' | 'filter' | 'block'
+  scope: 'all' | 'oauth' | 'apikey'
+  error_message?: string
+}
+
+/**
+ * Beta policy settings interface
+ */
+export interface BetaPolicySettings {
+  rules: BetaPolicyRule[]
+}
+
+/**
+ * Get beta policy settings
+ * @returns Beta policy settings
+ */
+export async function getBetaPolicySettings(): Promise<BetaPolicySettings> {
+  const { data } = await apiClient.get<BetaPolicySettings>('/admin/settings/beta-policy')
+  return data
+}
+
+/**
+ * Update beta policy settings
+ * @param settings - Beta policy settings to update
+ * @returns Updated settings
+ */
+export async function updateBetaPolicySettings(
+  settings: BetaPolicySettings
+): Promise<BetaPolicySettings> {
+  const { data } = await apiClient.put<BetaPolicySettings>(
+    '/admin/settings/beta-policy',
+    settings
+  )
+  return data
+}
+
 // ==================== Sora S3 Settings ====================
 
 export interface SoraS3Settings {
@@ -419,6 +497,10 @@ export const settingsAPI = {
   deleteAdminApiKey,
   getStreamTimeoutSettings,
   updateStreamTimeoutSettings,
+  getRectifierSettings,
+  updateRectifierSettings,
+  getBetaPolicySettings,
+  updateBetaPolicySettings,
   getSoraS3Settings,
   updateSoraS3Settings,
   testSoraS3Connection,

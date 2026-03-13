@@ -236,6 +236,60 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	require.NotContains(t, body, "\"name\":\"edit\"")
 }
 
+func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreaming(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", bytes.NewReader(nil))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	originalBody := []byte(`{"model":"gpt-5.1-codex","stream":true,"store":true,"instructions":"local-test-instructions","input":[{"type":"text","text":"compact me"}]}`)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid-compact"}},
+		Body:       io.NopCloser(strings.NewReader(`{"id":"cmp_123","usage":{"input_tokens":11,"output_tokens":22}}`)),
+	}
+	upstream := &httpUpstreamRecorder{resp: resp}
+
+	svc := &OpenAIGatewayService{
+		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
+		httpUpstream: upstream,
+	}
+
+	account := &Account{
+		ID:             123,
+		Name:           "acc",
+		Platform:       PlatformOpenAI,
+		Type:           AccountTypeOAuth,
+		Concurrency:    1,
+		Credentials:    map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+		Extra:          map[string]any{"openai_passthrough": true},
+		Status:         StatusActive,
+		Schedulable:    true,
+		RateMultiplier: f64p(1),
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, originalBody)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.Stream)
+
+	require.False(t, gjson.GetBytes(upstream.lastBody, "store").Exists())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "stream").Exists())
+	require.Equal(t, "gpt-5.1-codex", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "compact me", gjson.GetBytes(upstream.lastBody, "input.0.text").String())
+	require.Equal(t, "local-test-instructions", strings.TrimSpace(gjson.GetBytes(upstream.lastBody, "instructions").String()))
+	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
+	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("Session_Id"))
+	require.Equal(t, "chatgpt.com", upstream.lastReq.Host)
+	require.Equal(t, "chatgpt-acc", upstream.lastReq.Header.Get("chatgpt-account-id"))
+	require.Contains(t, rec.Body.String(), `"id":"cmp_123"`)
+}
+
 func TestOpenAIGatewayService_OAuthPassthrough_CodexMissingInstructionsRejectedBeforeUpstream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logSink, restore := captureStructuredLog(t)
@@ -617,7 +671,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *test
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
 	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
 
-	originalBody := []byte(`{"model":"gpt-5.2","stream":true,"input":[{"type":"text","text":"hi"}]}`)
+	originalBody := []byte(`{"model":"gpt-5.2","stream":true,"service_tier":"fast","input":[{"type":"text","text":"hi"}]}`)
 
 	upstreamSSE := strings.Join([]string{
 		`data: {"type":"response.output_text.delta","delta":"h"}`,
@@ -657,6 +711,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *test
 	require.GreaterOrEqual(t, time.Since(start), time.Duration(0))
 	require.NotNil(t, result.FirstTokenMs)
 	require.GreaterOrEqual(t, *result.FirstTokenMs, 0)
+	require.NotNil(t, result.ServiceTier)
+	require.Equal(t, "priority", *result.ServiceTier)
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_StreamClientDisconnectStillCollectsUsage(t *testing.T) {
@@ -723,7 +779,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEnd
 	c.Request.Header.Set("User-Agent", "curl/8.0")
 	c.Request.Header.Set("X-Test", "keep")
 
-	originalBody := []byte(`{"model":"gpt-5.2","stream":false,"max_output_tokens":128,"input":[{"type":"text","text":"hi"}]}`)
+	originalBody := []byte(`{"model":"gpt-5.2","stream":false,"service_tier":"flex","max_output_tokens":128,"input":[{"type":"text","text":"hi"}]}`)
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid"}},
@@ -749,8 +805,11 @@ func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEnd
 		RateMultiplier: f64p(1),
 	}
 
-	_, err := svc.Forward(context.Background(), c, account, originalBody)
+	result, err := svc.Forward(context.Background(), c, account, originalBody)
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.ServiceTier)
+	require.Equal(t, "flex", *result.ServiceTier)
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, originalBody, upstream.lastBody)
 	require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())

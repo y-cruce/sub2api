@@ -127,6 +127,7 @@ func (f *fakeConcurrencyCache) GetAccountConcurrencyBatch(_ context.Context, acc
 	return result, nil
 }
 func (f *fakeConcurrencyCache) CleanupExpiredAccountSlots(context.Context, int64) error { return nil }
+func (f *fakeConcurrencyCache) CleanupStaleProcessSlots(context.Context, string) error  { return nil }
 
 func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*service.Account) (*GatewayHandler, func()) {
 	t.Helper()
@@ -155,6 +156,7 @@ func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*servi
 		nil, // sessionLimitCache
 		nil, // rpmCache
 		nil, // digestStore
+		nil, // settingService
 	)
 
 	// RunModeSimple：跳过计费检查，避免引入 repo/cache 依赖。

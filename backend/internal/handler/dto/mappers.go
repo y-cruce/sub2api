@@ -71,7 +71,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 	if k == nil {
 		return nil
 	}
-	return &APIKey{
+	out := &APIKey{
 		ID:            k.ID,
 		UserID:        k.UserID,
 		Key:           k.Key,
@@ -89,15 +89,28 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		RateLimit5h:   k.RateLimit5h,
 		RateLimit1d:   k.RateLimit1d,
 		RateLimit7d:   k.RateLimit7d,
-		Usage5h:       k.Usage5h,
-		Usage1d:       k.Usage1d,
-		Usage7d:       k.Usage7d,
+		Usage5h:       k.EffectiveUsage5h(),
+		Usage1d:       k.EffectiveUsage1d(),
+		Usage7d:       k.EffectiveUsage7d(),
 		Window5hStart: k.Window5hStart,
 		Window1dStart: k.Window1dStart,
 		Window7dStart: k.Window7dStart,
 		User:          UserFromServiceShallow(k.User),
 		Group:         GroupFromServiceShallow(k.Group),
 	}
+	if k.Window5hStart != nil && !service.IsWindowExpired(k.Window5hStart, service.RateLimitWindow5h) {
+		t := k.Window5hStart.Add(service.RateLimitWindow5h)
+		out.Reset5hAt = &t
+	}
+	if k.Window1dStart != nil && !service.IsWindowExpired(k.Window1dStart, service.RateLimitWindow1d) {
+		t := k.Window1dStart.Add(service.RateLimitWindow1d)
+		out.Reset1dAt = &t
+	}
+	if k.Window7dStart != nil && !service.IsWindowExpired(k.Window7dStart, service.RateLimitWindow7d) {
+		t := k.Window7dStart.Add(service.RateLimitWindow7d)
+		out.Reset7dAt = &t
+	}
+	return out
 }
 
 func GroupFromServiceShallow(g *service.Group) *Group {
@@ -126,6 +139,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		ModelRouting:         g.ModelRouting,
 		ModelRoutingEnabled:  g.ModelRoutingEnabled,
 		MCPXMLInject:         g.MCPXMLInject,
+		DefaultMappedModel:   g.DefaultMappedModel,
 		SupportedModelScopes: g.SupportedModelScopes,
 		AccountCount:         g.AccountCount,
 		SortOrder:            g.SortOrder,
@@ -164,6 +178,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		FallbackGroupID:                 g.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: g.FallbackGroupIDOnInvalidRequest,
 		SoraStorageQuotaBytes:           g.SoraStorageQuotaBytes,
+		AllowMessagesDispatch:           g.AllowMessagesDispatch,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}
@@ -253,10 +268,18 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 	if a.Type == service.AccountTypeAPIKey {
 		if limit := a.GetQuotaLimit(); limit > 0 {
 			out.QuotaLimit = &limit
-		}
-		used := a.GetQuotaUsed()
-		if out.QuotaLimit != nil {
+			used := a.GetQuotaUsed()
 			out.QuotaUsed = &used
+		}
+		if limit := a.GetQuotaDailyLimit(); limit > 0 {
+			out.QuotaDailyLimit = &limit
+			used := a.GetQuotaDailyUsed()
+			out.QuotaDailyUsed = &used
+		}
+		if limit := a.GetQuotaWeeklyLimit(); limit > 0 {
+			out.QuotaWeeklyLimit = &limit
+			used := a.GetQuotaWeeklyUsed()
+			out.QuotaWeeklyUsed = &used
 		}
 	}
 
@@ -473,6 +496,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		AccountID:             l.AccountID,
 		RequestID:             l.RequestID,
 		Model:                 l.Model,
+		ServiceTier:           l.ServiceTier,
 		ReasoningEffort:       l.ReasoningEffort,
 		GroupID:               l.GroupID,
 		SubscriptionID:        l.SubscriptionID,
